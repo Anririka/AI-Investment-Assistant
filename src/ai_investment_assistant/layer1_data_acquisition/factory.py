@@ -36,6 +36,41 @@ def _register_default_repositories() -> None:
     except ImportError:
         pass
 
+    try:
+        from .repositories.alpha_vantage import AlphaVantageRepository
+
+        REPOSITORY_REGISTRY["alpha_vantage"] = AlphaVantageRepository.from_config
+    except ImportError:
+        pass
+
+    try:
+        from .repositories.twelve_data import TwelveDataRepository
+
+        REPOSITORY_REGISTRY["twelve_data"] = TwelveDataRepository.from_config
+    except ImportError:
+        pass
+
+    try:
+        from .repositories.fred import FredRepository
+
+        REPOSITORY_REGISTRY["fred"] = FredRepository.from_config
+    except ImportError:
+        pass
+
+    try:
+        from .repositories.newsapi import NewsApiRepository
+
+        REPOSITORY_REGISTRY["newsapi"] = NewsApiRepository.from_config
+    except ImportError:
+        pass
+
+    try:
+        from .repositories.gdelt import GdeltRepository
+
+        REPOSITORY_REGISTRY["gdelt"] = GdeltRepository.from_config
+    except ImportError:
+        pass
+
 
 _register_default_repositories()
 
