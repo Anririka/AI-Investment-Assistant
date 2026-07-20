@@ -3,6 +3,11 @@
 # Phase1〜4（Layer1〜Layer4）のユニットテスト（tests/以下すべて）もここで自動実行する。
 # Layer1〜4を実際に通しで実行する本番ステップ（実データ取得〜永続化）は、
 # Layer5（Claude Coworkセッション側）の実装が固まった時点でここへ追加する。
+#
+# 注意：tests/layer5/ 配下のユニットテストもこの pytest ステップで一緒に実行される。
+# ただしLayer5自体（AI Agent実行層）はGitHub Actions上では動かず、Claude Coworkの
+# スケジュールタスクとして別途稼働する（layer5_ai_judgment_design.md §0）。ここで
+# テストしているのはLayer5がBashツールで呼び出す決定的計算処理（scripts/*.py）のみ。
 
 name: Data Pipeline (Layer1-4)
 
@@ -28,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run unit tests (Layer1 + Layer2 + Layer3 + Layer4)
+      - name: Run unit tests (Layer1 + Layer2 + Layer3 + Layer4 + Layer5 scripts)
         run: pytest tests -v
 
       - name: Phase0 smoke test (config load + Google Drive connectivity)

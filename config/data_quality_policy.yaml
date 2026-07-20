@@ -1,0 +1,28 @@
+# layer5_ai_judgment_design.md §5-1の確定仕様。
+#
+# 「critical_errorsが1件でもあれば無条件に様子見」という単純な設計は採用しない。
+# 投資判断そのものが不能なエラー（blocking）と、判断は継続するが慎重さを増すべき
+# エラー（warning）を明示的に区別する。この分類ポリシー自体はLayer5が保持し、
+# Layer2・Layer3はエラーコードを正しく構造化して出力するだけ、という責務分離を
+# 維持する（layer2_analysis_design.md §10参照）。
+#
+# 判定はLayer2出力のrun_meta.data_quality.critical_errors／warning_errorsの
+# 両方に含まれる各エントリのcodeフィールドに対して行う（Layer2自身がどちらの配列に
+# 入れたかは問わず、Layer5が本ポリシーで独自に再分類する。§5-1）。
+blocking_errors:
+  - SNAPSHOT_MISSING
+  - PRICE_DATA_INVALID
+  - SCORING_FAILED
+  - SCHEMA_VERSION_ERROR
+  - PORTFOLIO_STATE_INVALID
+  - LAYER_PIPELINE_NOT_COMPLETED
+warning_errors:
+  - NEWS_API_FAILURE_PARTIAL
+  - SINGLE_STOCK_DATA_FAILURE
+  - MINOR_SOURCE_TIMEOUT
+
+# Layer4完了フラグ（snapshots/layer4_completed_YYYYMMDD.json）の到達を待つ規定時間（分）。
+# スケジュールタスク起動からこの時間内にフラグが存在しない場合、LLM推論を一切行わず
+# 「本日はデータ準備未完了のため様子見」として reason_code: LAYER_PIPELINE_NOT_COMPLETED
+# で確定する（§3-1）。
+completion_flag_timeout_minutes: 30

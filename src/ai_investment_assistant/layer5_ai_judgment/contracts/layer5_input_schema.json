@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Layer5 Input Contract",
+  "description": "layer5_ai_judgment_design.md §4の確定仕様。Layer5は2つのデータソースのみを入力とする：(1) Layer2出力（market_snapshot_YYYYMMDD.json、実体はlayer2_analysis/schemas/layer2_output.schema.jsonで別途定義済みのためここではトップレベルキーの存在のみを確認する）、(2) portfolio_state（Layer5固有の新設入力、§4-2）。",
+  "type": "object",
+  "required": ["layer2_output", "portfolio_state"],
+  "properties": {
+    "layer2_output": {
+      "type": "object",
+      "required": ["run_meta", "regime", "macro", "candidates", "excluded_summary"]
+    },
+    "portfolio_state": {
+      "type": "object",
+      "required": [
+        "as_of", "total_capital", "total_invested", "available_capital",
+        "positions", "sector_concentration"
+      ],
+      "properties": {
+        "as_of": { "type": "string" },
+        "total_capital": { "type": "number" },
+        "total_invested": { "type": "number" },
+        "available_capital": { "type": "number" },
+        "positions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ticker", "asset_class", "sector", "invested_amount", "entry_price", "shares"],
+            "properties": {
+              "ticker": { "type": "string" },
+              "asset_class": { "type": "string" },
+              "sector": { "type": "string" },
+              "invested_amount": { "type": "number" },
+              "entry_price": { "type": "number" },
+              "shares": { "type": "number" }
+            }
+          }
+        },
+        "sector_concentration": { "type": "object" }
+      }
+    }
+  }
+}

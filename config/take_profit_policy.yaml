@@ -1,0 +1,14 @@
+# layer5_ai_judgment_design.md §8の確定仕様。
+#
+# LLMは各候補についてtake_profit_target_pct（目標騰落率、%）とtake_profit_basis
+# （その根拠）を出力するが、LLMは数値を自由に生成できる立場にあるため、
+# 「LLMは判断するが資金管理ルールは必ずPythonが守る」という設計思想に基づき、
+# position_sizer.pyが以下の許容範囲を機械的に強制する。
+#
+# - min_pct〜max_pctの範囲内：LLMの値をそのまま採用する。
+# - 範囲外：最も近い境界値へ補正する（rule_enforcement_logに必ず記録し、隠蔽しない）。
+# - 値が欠落・非数値等、構造的に無効な場合：default_pctを採用し、その旨を記録する。
+take_profit_policy:
+  min_pct: 5
+  max_pct: 50
+  default_pct: 15

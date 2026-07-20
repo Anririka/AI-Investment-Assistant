@@ -1,0 +1,19 @@
+# 銘柄コード→セクターの対応表（プレースホルダー）。
+#
+# config/universe.yaml と同様、動作確認用の代表銘柄のみを記載した仮データである。
+# 本番運用開始（対象銘柄一覧の実データ差し替え）までに、実際の対象銘柄一覧に合わせて
+# 更新が必要（layer5_ai_judgment_design.md §4-2のportfolio_state.sector_concentration
+# が必要とする、ticker→sectorのルックアップ用にLayer5で新設）。
+#
+# 未登録のtickerは load_portfolio_state.py 側で sector: "unknown" として集計する。
+sectors:
+  "7203": "automobile"              # トヨタ自動車
+  "6758": "electronics"             # ソニーグループ
+  "9984": "telecom"                 # ソフトバンクグループ
+  "8306": "financials"              # 三菱UFJフィナンシャル・グループ
+  "6861": "electronics"             # キーエンス
+  "AAPL": "technology"
+  "MSFT": "technology"
+  "NVDA": "semiconductor"
+  "GOOGL": "technology"
+  "AMZN": "consumer_discretionary"
