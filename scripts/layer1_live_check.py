@@ -15,6 +15,7 @@ Phase1完了基準（layer1_data_acquisition_design.md 9章）の1・6・7項目
 
 from __future__ import annotations
 
+import os
 import sys
 import traceback
 from datetime import date, timedelta
@@ -36,6 +37,34 @@ NEWS_QUERY = ["Toyota"]
 
 TODAY = date.today()
 LOOKBACK_DAYS = 14
+# CPIAUCSL等の月次系列は月初にしかデータ点が無いため、日次データより広い期間で確認する
+MACRO_LOOKBACK_DAYS = 120
+
+
+def _debug_dump_jquants_raw_response(ticker: str, start: date, end: date) -> None:
+    """J-Quants V2の生レスポンスをそのままログに出力する（フィールド名調査用の一時的な処理）。
+
+    get_daily_pricesの正規化結果が空になる原因を特定するため、Repositoryを経由せず
+    直接HTTPリクエストを投げて中身を確認する。原因が判明しjquants.pyの実装を
+    実レスポンスに合わせて修正したら、このデバッグ出力は削除してよい。
+    """
+    import requests
+
+    api_key = os.environ.get("JQUANTS_API_KEY", "")
+    if not api_key:
+        print("[DEBUG] JQUANTS_API_KEY not set, skipping raw response dump")
+        return
+    try:
+        response = requests.get(
+            "https://api.jquants.com/v2/equities/bars/daily",
+            headers={"x-api-key": api_key},
+            params={"code": ticker, "from": start.isoformat(), "to": end.isoformat()},
+            timeout=30,
+        )
+        print(f"[DEBUG] jquants raw status={response.status_code}")
+        print(f"[DEBUG] jquants raw body (first 2000 chars): {response.text[:2000]}")
+    except Exception as exc:  # noqa: BLE001
+        print(f"[DEBUG] jquants raw request failed: {exc}")
 
 
 def _run_check(name: str, fn) -> bool:
@@ -63,12 +92,13 @@ def main() -> int:
     try:
         japan_chain = factory.build_chain("japan_equity")
         for ticker in JAPAN_TICKERS:
-            results.append(
-                _run_check(
-                    f"japan_equity.get_daily_prices({ticker})",
-                    lambda t=ticker: japan_chain.call("get_daily_prices", t, start, TODAY),
-                )
+            passed = _run_check(
+                f"japan_equity.get_daily_prices({ticker})",
+                lambda t=ticker: japan_chain.call("get_daily_prices", t, start, TODAY),
             )
+            results.append(passed)
+            # bars=()のように「成功はしたが空」の場合も含め、生レスポンスを確認する
+            _debug_dump_jquants_raw_response(ticker, start, TODAY)
     except Exception as exc:  # noqa: BLE001
         print(f"[FAIL] japan_equity chain build: {exc}")
         results.append(False)
@@ -88,11 +118,12 @@ def main() -> int:
 
     try:
         macro_chain = factory.build_chain("macro")
+        macro_start = TODAY - timedelta(days=MACRO_LOOKBACK_DAYS)
         for series_id in FRED_SERIES:
             results.append(
                 _run_check(
                     f"macro.get_series({series_id})",
-                    lambda s=series_id: macro_chain.call("get_series", s, start, TODAY),
+                    lambda s=series_id: macro_chain.call("get_series", s, macro_start, TODAY),
                 )
             )
     except Exception as exc:  # noqa: BLE001

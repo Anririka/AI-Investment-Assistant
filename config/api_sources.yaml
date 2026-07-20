@@ -32,10 +32,13 @@ macro:
     - name: fred
 
 news:
+  # 10章確定事項1「NewsAPIは開発・検証用途およびGDELT障害時の補助用途に限定。
+  # 本番の主力はGDELT」の方針に沿い、GDELTを先に試す順序にしている
+  # （NewsAPIを先に置いた設計書§3-3の設定例は、この方針との整合性を優先し補正した）。
   chain:
-    - name: newsapi
-      rate_limit_per_day: 100
-      environment: development_only   # 本番の毎朝実行での常用は規約上非推奨
     - name: gdelt
       role: "production_primary"
+    - name: newsapi
+      rate_limit_per_day: 100
+      environment: development_only   # 本番の毎朝実行での常用は規約上非推奨。GDELT障害時のみ使用
     - name: web_search_fallback
