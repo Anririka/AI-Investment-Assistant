@@ -1,0 +1,34 @@
+# Layer1〜4（データ取得〜永続化）を実行するGitHub Actionsパイプライン。
+# Phase0時点ではLayer1〜4本体はまだ実装されていないため、
+# 「環境構築・Secrets・Google Drive連携が機能すること」のみを確認するsmoke testのみを実行する。
+# Layer1実装（Phase1）以降、このワークフローにLayer1〜4呼び出しステップを追加していく。
+
+name: Data Pipeline (Layer1-4)
+
+on:
+  workflow_dispatch: {}
+  # Phase1以降で実運用スケジュールを確定するまでは手動実行のみとする。
+  # 稼働開始時にscheduleを有効化する（例：毎朝06:00 JST = 21:00 UTC）。
+  # schedule:
+  #   - cron: "0 21 * * *"
+
+jobs:
+  phase0-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Phase0 smoke test (config load + Google Drive connectivity)
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: python scripts/phase0_smoke_test.py
