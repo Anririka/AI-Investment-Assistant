@@ -1,0 +1,20 @@
+# AI投資アシスタント Phase0 依存パッケージ
+# Python 3.11 を前提（GitHub Actions ubuntu-latest + actions/setup-python@v5 で指定）
+#
+# Layer1（データ取得層）: requests, pandas, PyYAML
+# Layer4（永続化層／Google Drive連携）: google-api-python-client, google-auth, google-auth-httplib2
+# 全レイヤー共通: python-dotenv（ローカル開発時の.env読み込み）, jsonschema（各レイヤーのJSON契約検証）
+# テスト: pytest
+#
+# Layer2以降で追加が必要になるパッケージ（numpy等）はPhase2着手時にこのファイルへ追記する。
+# Phase0時点ではLayer1／Layer4の疎通確認に必要な最小構成のみを定義する。
+
+requests>=2.31,<3
+pandas>=2.2,<3
+PyYAML>=6.0,<7
+python-dotenv>=1.0,<2
+jsonschema>=4.21,<5
+google-api-python-client>=2.120,<3
+google-auth>=2.28,<3
+google-auth-httplib2>=0.2,<1
+pytest>=8.0,<9

@@ -1,0 +1,41 @@
+# RepositoryFactory設定ファイル（layer1_data_acquisition_design.md §3-2, §3-3 の確定仕様どおり）
+#
+# データ種別ごとに、どの具体Repositoryを・どの優先順位で・キャッシュ有無をどう設定してチェーンに
+# 組み込むかを定義する。新しいデータソースを追加する場合、対応する具体Repositoryクラスを1つ実装し、
+# 本ファイルに1行追記するだけで済み、他のコードは変更不要（layer1_data_acquisition_design.md §3-2）。
+#
+# 実際のキー・トークンはここには書かず、環境変数／GitHub Secrets経由で各Repository実装に渡す
+# （.env.example参照）。
+
+japan_equity:
+  chain:
+    - name: jquants
+      plan: light            # free / light / standard / premium（Light加入済み、§8の移行手順どおりplanのみ変更）
+      price_delay_weeks: 0    # Lightプランのため遅延なし
+      rate_limit_per_minute: 60
+      api_version: v2         # V2 APIキー方式（x-api-keyヘッダー）。V1のmailaddress/password認証は使用しない
+    - name: web_search_fallback
+      note: "個別TSE銘柄の当日データはカバレッジ不安定。取得成功でもdata_quality_gateで要検証扱い"
+
+us_equity:
+  chain:
+    - name: alpha_vantage
+      rate_limit_per_day: 25
+      rate_limit_per_minute: 5
+      reserved_for: ["earnings_surprise", "final_candidates_detail"]
+    - name: twelve_data
+      rate_limit_per_day: 800
+      role: "primary_bulk_scan"
+
+macro:
+  chain:
+    - name: fred
+
+news:
+  chain:
+    - name: newsapi
+      rate_limit_per_day: 100
+      environment: development_only   # 本番の毎朝実行での常用は規約上非推奨
+    - name: gdelt
+      role: "production_primary"
+    - name: web_search_fallback
