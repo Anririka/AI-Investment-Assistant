@@ -1,0 +1,152 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Layer2 Output (Layer5 Input Contract)",
+  "description": "layer2_analysis_design.md §5-1の確定仕様",
+  "type": "object",
+  "required": ["run_meta", "regime", "macro", "candidates", "excluded_summary"],
+  "additionalProperties": true,
+  "properties": {
+    "run_meta": {
+      "type": "object",
+      "required": ["run_id", "analysis_started_at", "analysis_completed_at", "score_meta", "data_quality"],
+      "properties": {
+        "run_id": { "type": "string" },
+        "analysis_started_at": { "type": "string" },
+        "analysis_completed_at": { "type": "string" },
+        "score_meta": {
+          "type": "object",
+          "required": ["scoring_version", "weight_version"],
+          "properties": {
+            "scoring_version": { "type": "string" },
+            "weight_version": { "type": "string" }
+          }
+        },
+        "data_quality": {
+          "type": "object",
+          "required": ["critical_errors", "warning_errors", "degraded_sources", "excluded_candidates_count"],
+          "properties": {
+            "critical_errors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["code", "message", "source_layer"],
+                "properties": {
+                  "code": { "type": "string" },
+                  "message": { "type": "string" },
+                  "source_layer": { "type": "string", "enum": ["layer1", "layer2", "layer3"] }
+                }
+              }
+            },
+            "warning_errors": { "type": "array" },
+            "degraded_sources": { "type": "array", "items": { "type": "string" } },
+            "excluded_candidates_count": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "regime": {
+      "type": "object",
+      "required": ["current_regime", "regime_reason", "strategy_bias"],
+      "properties": {
+        "current_regime": { "type": "string", "enum": ["uptrend", "downtrend", "range"] },
+        "regime_reason": { "type": "string" },
+        "strategy_bias": { "type": "object" }
+      }
+    },
+    "macro": {
+      "type": "object",
+      "required": ["series", "axis_score", "axis_score_reason"],
+      "properties": {
+        "series": { "type": "object" },
+        "axis_score": { "type": "number", "minimum": 0, "maximum": 100 },
+        "axis_score_reason": { "type": "string" }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "asset_class", "ticker", "name", "style_tags", "preliminary_quant_rank",
+          "data_quality", "technical", "fundamental", "supply_demand", "news",
+          "macro_axis_score_ref", "regime_fit", "composite_score"
+        ],
+        "properties": {
+          "asset_class": { "type": "string" },
+          "ticker": { "type": "string" },
+          "name": { "type": "string" },
+          "style_tags": { "type": "array", "items": { "type": "string" } },
+          "preliminary_quant_rank": { "type": "integer", "minimum": 1 },
+          "data_quality": { "type": "object" },
+          "technical": {
+            "type": "object",
+            "required": ["raw", "sub_scores", "axis_score", "axis_score_reason"],
+            "properties": {
+              "raw": { "type": "object" },
+              "sub_scores": { "type": "array" },
+              "axis_score": { "type": "number", "minimum": 0, "maximum": 100 },
+              "axis_score_reason": { "type": "string" }
+            }
+          },
+          "fundamental": {
+            "type": "object",
+            "required": ["raw", "sub_scores", "axis_score", "axis_score_reason"]
+          },
+          "supply_demand": {
+            "type": "object",
+            "required": ["raw", "sub_scores", "axis_score", "axis_score_reason"]
+          },
+          "news": {
+            "type": "object",
+            "required": ["relevant_items", "score", "uncertainty", "axis_score_reason"],
+            "properties": {
+              "relevant_items": { "type": "array" },
+              "score": { "type": "number", "minimum": 0, "maximum": 100 },
+              "uncertainty": { "type": "number", "minimum": 0, "maximum": 100 },
+              "axis_score_reason": { "type": "string" }
+            }
+          },
+          "macro_axis_score_ref": { "type": "number", "minimum": 0, "maximum": 100 },
+          "regime_fit": {
+            "type": "object",
+            "required": ["score", "reason"],
+            "properties": {
+              "score": { "type": "number", "minimum": 0, "maximum": 100 },
+              "reason": { "type": "string" }
+            }
+          },
+          "composite_score": {
+            "type": "object",
+            "required": ["total", "breakdown_weights", "calculation_note", "score_meta"],
+            "properties": {
+              "total": { "type": "number", "minimum": 0, "maximum": 100 },
+              "breakdown_weights": { "type": "object" },
+              "calculation_note": { "type": "string" },
+              "score_meta": {
+                "type": "object",
+                "required": ["scoring_version", "weight_version"],
+                "properties": {
+                  "scoring_version": { "type": "string" },
+                  "weight_version": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "excluded_summary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ticker", "asset_class", "reason_code", "reason"],
+        "properties": {
+          "ticker": { "type": "string" },
+          "asset_class": { "type": "string" },
+          "reason_code": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    }
+  }
+}

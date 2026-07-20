@@ -1,0 +1,19 @@
+# layer2_analysis_design.md §3-8の確定仕様どおり。screener.py（母集団フィルタリング）が使用する。
+#
+# 重要な注意：本ファイルの銘柄一覧はプレースホルダーです。日経225・S&P500の実際の構成銘柄
+# リストは定期的に入れ替わるため、本番運用開始（Phase9〜10）までに、実際の最新構成銘柄
+# リストに差し替える必要があります（取得方法はLayer1のget_listed_universe、または
+# 各指数運営元が公開する構成銘柄リストを別途参照）。ここでは動作確認用に代表的な銘柄を
+# 数件のみ例示しています。
+
+japan_equity:
+  index_name: "日経225（プレースホルダー、要更新）"
+  tickers: ["7203", "6758", "9984", "8306", "6861"]
+  min_market_cap: 100000000000     # 1000億円
+  min_avg_volume: 500000            # 過去20日平均出来高
+
+us_equity:
+  index_name: "S&P500（プレースホルダー、要更新）"
+  tickers: ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN"]
+  min_market_cap: 10000000000       # 100億ドル
+  min_avg_volume: 1000000

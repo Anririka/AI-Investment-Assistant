@@ -1,0 +1,19 @@
+# layer2_analysis_design.md §3-10-1の確定仕様どおり。
+# json_builder.pyがLayer5へ渡す候補件数の上限と、プロンプトのトークン予算を管理する。
+
+candidate_limits:
+  japan_equity: 10
+  us_equity: 10
+  etf: 5
+  bond: 3
+  gold: 3
+  other: 3
+max_total_candidates: 30   # 上記合計の目安上限（超過時は資産クラスごとの上限を優先し、超過分は警告ログに記録）
+
+prompt_budget:
+  claude: 12000
+  gpt: 8000
+  gemini: 10000
+# Layer5が未実装のため、現時点ではactive_providerを直接指定する（デフォルトclaude）。
+# Layer5実装時にconfig/ai_provider.yamlとの参照解決に置き換える。
+active_provider: "claude"

@@ -1,0 +1,6 @@
+# layer2_analysis_design.md §3-6の確定仕様どおり。
+# Layer3が出力するnews_schema_versionを、メジャーバージョン単位の後方互換ルールで検証する。
+
+news_schema:
+  supported_schema_versions: ["1.0", "1.1"]
+  accept_major_version: 1

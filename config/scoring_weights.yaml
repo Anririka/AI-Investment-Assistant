@@ -1,0 +1,72 @@
+# scoring_specification.md §1の確定仕様どおり。
+# 軸別配点の合計は100。各軸内のサブ指標配点合計も100。
+
+scoring_version: "1.0.0"
+weight_version: "2026-07"
+
+axis_weights:
+  technical: 25
+  fundamental: 25
+  supply_demand: 15
+  macro: 15
+  news: 10
+  regime: 10
+
+technical:
+  MA: 25
+  MACD: 20
+  RSI: 15
+  ADX: 10
+  ATR: 10
+  BollingerBands: 10
+  VWAP: 5
+  Week52HighLow: 5
+
+fundamental:
+  ROE: 15
+  PER: 15
+  EPSGrowth: 15
+  SalesGrowth: 10
+  OperatingMargin: 10
+  PBR: 10
+  FCFLevel: 5
+  FCFGrowth: 5
+  EquityRatio: 5
+  DividendYieldRank: 5
+  ROA: 5
+
+supply_demand:
+  VolumeSurgeRatio: 45
+  VolumeMADeviation: 35
+  MarginRatio: 20   # J-Quants Freeでは常時欠損 -> 欠損時は残り2項目で100%按分
+
+macro:
+  US10YYield: 20
+  FedFundsRate: 20
+  UnemploymentRate: 15
+  CPI: 15
+  PPI: 10
+  GDP: 10
+  LeadingIndex: 10
+
+news:
+  method: "weighted_sentiment_aggregation_with_uncertainty"
+  decay_config_ref: "config/news_decay.yaml"
+
+regime:
+  method: "rule_based_lookup"
+
+# per_scorer: PERのスコアリング方式（layer2_analysis_design.md §3-2のStrategyパターン）
+# Ver1はabsolute_rangeで確定。将来sector_relativeへ切り替える際はここを変更するのみでよい。
+per_scorer: absolute_range
+
+# macro_sector_correction: マクロ軸のセクター感応度補正係数（§3-4）。
+# Ver1は全スタイルタグ1.0（補正なし）で確定。人間レビューによる将来調整のためのインターフェース。
+macro_sector_correction:
+  growth: 1.0
+  value: 1.0
+  defensive: 1.0
+  high_dividend: 1.0
+  semiconductor: 1.0
+  ai: 1.0
+  default: 1.0

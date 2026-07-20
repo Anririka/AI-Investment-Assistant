@@ -1,0 +1,10 @@
+# scoring_specification.md §3-5の確定仕様どおり。
+# Layer3が付与するage_hours（記事公開からの経過時間）に対する時間減衰係数。
+# ハードコードせず、将来の運用変更をconfig変更のみで反映できるようにする。
+
+decay_curve:
+  - { within_hours: 24, factor: 1.0, reason_code: "NEWS_DECAY_FRESH" }
+  - { within_hours: 72, factor: 0.8, reason_code: "NEWS_DECAY_RECENT" }
+  - { within_hours: 168, factor: 0.6, reason_code: "NEWS_DECAY_WEEK_OLD" }
+  - { within_hours: 336, factor: 0.3, reason_code: "NEWS_DECAY_TWO_WEEKS_OLD" }
+  - { within_hours: null, factor: 0.1, reason_code: "NEWS_DECAY_STALE" }
