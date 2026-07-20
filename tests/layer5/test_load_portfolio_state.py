@@ -10,6 +10,7 @@ import pytest
 from ai_investment_assistant.layer5_ai_judgment.scripts.load_portfolio_state import (
     PortfolioStateError,
     build_portfolio_state,
+    load_capital_policy,
     parse_trade_record_csv,
     resolve_total_capital,
     run_load_portfolio_state,
@@ -54,6 +55,16 @@ def test_resolve_total_capital_uses_test_phase_when_enabled():
 def test_resolve_total_capital_uses_full_scale_when_test_phase_disabled():
     policy = {"full_scale": {"total_capital": 3000000}, "test_phase": {"enabled": False, "total_capital": 250000}}
     assert resolve_total_capital(policy) == 3000000
+
+
+def test_actual_capital_policy_yaml_loads_and_resolves_to_test_phase_amount():
+    # 実際のconfig/capital_policy.yamlがYAMLとして正しく読め、かつplanned_start_date/
+    # planned_end_dateがnullのままでもresolve_total_capital()が問題なく動作すること
+    # （テスト期間開始日がまだ確定していない現時点での状態）を確認する。
+    policy = load_capital_policy()
+    assert policy["test_phase"]["planned_start_date"] is None
+    assert policy["test_phase"]["planned_end_date"] is None
+    assert resolve_total_capital(policy) == 250000
 
 
 def test_resolve_total_capital_ignores_planned_dates_even_if_period_has_elapsed():

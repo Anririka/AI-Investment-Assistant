@@ -15,11 +15,18 @@
 # （load_portfolio_state.pyのresolve_total_capital()参照）。
 #
 # 期間（2026-07、ユーザー明示確認事項・追加）：
-# 初回のみではなく「最初の1か月」をこの上限ありの設定で運用する。ただし
+# 初回のみではなく「最初の1か月」をこの上限ありの設定で運用する。起点は実装日
+# （config反映日）ではなく、「Layer5の実運用テストを実際に開始した日」とする。
 # planned_start_date／planned_end_date／planned_duration_daysは、あくまで人間向けの
 # 目安・記録用のフィールドである。resolve_total_capital()はこれらの日付を一切参照
 # しない（=期限が来ても自動的にfalseへは切り替わらない）。上限の解除・金額変更・
 # 期間の延長は、必ず人間がenabled／total_capitalを直接編集して判断する。
+#
+# planned_start_date／planned_end_dateは、Layer5の実運用テストがまだ開始されていない
+# 時点（本ファイル新設時点）では確定できないため、あえて null のままにしてある。
+# 実際にLayer5の実運用テストを開始した時点で、その開始日をplanned_start_dateに、
+# その30日後をplanned_end_dateに、人手で記入すること（このタイミングでのリマインドは
+# Claude側の標準リマインド事項として引き継ぐ）。
 full_scale:
   total_capital: 3000000
 
@@ -27,11 +34,8 @@ test_phase:
   enabled: true
   total_capital: 250000
   planned_duration_days: 30
-  # 実際にLayer5の実運用テスト（提案の採用判断）を開始した日に合わせて、
-  # 人手でこの2つの日付を更新すること（自動計算はしない）。ひとまず本設定を
-  # 反映した日（2026-07-20）を起点の仮値としている。
-  planned_start_date: "2026-07-20"
-  planned_end_date: "2026-08-20"
+  planned_start_date: null   # Layer5の実運用テストを開始した日に人手で記入
+  planned_end_date: null     # 上記開始日から30日後の日付を人手で記入
   note: >
     初期信頼検証期間中のユーザー指定上限（2026-07確定、期間は最初の1か月を想定）。
     全額運用（300万円）へ移行する際、または期間を延長・短縮する際は、この
