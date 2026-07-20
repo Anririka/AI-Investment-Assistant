@@ -3,7 +3,8 @@
 #
 # Layer1（データ取得層）: requests, pandas, PyYAML
 # Layer2（分析層）: pandas（テクニカル指標計算）, jsonschema
-# Layer3（ニュース処理層）: anthropic（ClaudeStructurer、§6確定事項）
+# Layer3（ニュース処理層）: google-genai（GeminiStructurer、コスト最適化のため採用）。
+#   anthropicはClaudeStructurer用に維持（provider: claudeへ戻す場合の代替経路として残す）
 # Layer4（永続化層／Google Drive連携）: google-api-python-client, google-auth, google-auth-httplib2
 # 全レイヤー共通: python-dotenv（ローカル開発時の.env読み込み）, jsonschema（各レイヤーのJSON契約検証）
 # テスト: pytest
@@ -17,4 +18,5 @@ google-api-python-client>=2.120,<3
 google-auth>=2.28,<3
 google-auth-httplib2>=0.2,<1
 anthropic>=0.40,<1
+google-genai>=1.0,<3
 pytest>=8.0,<9

@@ -1,7 +1,14 @@
 # layer3_news_processing_design.md §6・§14確定事項どおり。
 # Layer2/Layer5と共通の設定ファイル（現時点ではLayer3のnews_structurerセクションのみ）。
+#
+# コスト最適化のため、初期採用予定だったClaude（従量課金）からGemini（無料枠）へ変更。
+# NewsStructurerはStrategyパターンで抽象化済みのため、このconfigの値を変えるだけで
+# 切り替えが完結する（コード変更不要）。claude_structurer.pyは削除せず、将来
+# Gemini無料枠のレート制限で不足する場合等に備えて維持する。
 
 news_structurer:
-  provider: claude          # claude / gpt / gemini / local（Ver1確定：claude）
-  model: claude-haiku-4-5   # 安価な小型モデルを採用（構造化は高度な推論を要しないため）
+  provider: gemini                 # claude / gpt / gemini / local（コスト最適化のためgeminiに変更）
+  model: gemini-2.5-flash-lite     # 無料枠対象の低コストモデル
   batch_size: 5
+  # provider: claude を使う場合は、下記モデル指定に切り替える
+  # model: claude-haiku-4-5

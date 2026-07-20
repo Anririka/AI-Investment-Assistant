@@ -19,65 +19,15 @@ import os
 from typing import Optional
 
 from .base import NewsStructurer
+from .prompt_common import EXTRACTION_SCHEMA, build_prompt  # noqa: F401 (re-export、既存importとの互換性維持)
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 
 STRUCTURE_TOOL_SCHEMA = {
     "name": "submit_structured_news",
     "description": "ニュース記事を構造化した結果を送信する",
-    "input_schema": {
-        "type": "object",
-        "required": [
-            "category", "affected_companies", "affected_sectors", "impact_direction",
-            "impact_horizon", "importance", "confidence", "confidence_reason", "summary",
-        ],
-        "properties": {
-            "category": {"type": "string"},
-            "affected_companies": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "required": ["ticker", "name", "relevance"],
-                    "properties": {
-                        "ticker": {"type": "string"},
-                        "name": {"type": "string"},
-                        "relevance": {"type": "string", "enum": ["primary", "secondary"]},
-                    },
-                },
-            },
-            "affected_sectors": {"type": "array", "items": {"type": "string"}},
-            "impact_direction": {"type": "string", "enum": ["positive", "negative", "neutral"]},
-            "impact_horizon": {"type": "string", "enum": ["short_term", "mid_term", "long_term"]},
-            "importance": {"type": "integer", "minimum": 0, "maximum": 100},
-            "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-            "confidence_reason": {"type": "string"},
-            "summary": {"type": "string", "maxLength": 80},
-        },
-    },
+    "input_schema": EXTRACTION_SCHEMA,
 }
-
-
-def build_prompt(article: dict, universe_tickers: list, sector_master: list) -> str:
-    """プロンプトテンプレート（prompts/news_structuring_prompt_template.md、§7の要素）を組み立てる。"""
-    tickers_str = ", ".join(f"{t['ticker']}:{t['name']}" for t in universe_tickers) or "（なし）"
-    sectors_str = ", ".join(sector_master) or "（なし）"
-    return (
-        "以下のニュース記事を構造化してください。\n\n"
-        "【記事】\n"
-        f"見出し: {article['headline']}\n"
-        f"本文: {article['body']}\n\n"
-        "【対象ユニバース制約】\n"
-        "以下のリストに含まれる銘柄のみをaffected_companiesとして抽出してください。"
-        "リストに無い銘柄・業種に言及する場合は、affected_companiesは空にし、"
-        "affected_sectorsのみで表現してください。\n"
-        f"銘柄リスト: {tickers_str}\n"
-        f"業種リスト: {sectors_str}\n\n"
-        "【採点基準】\n"
-        "importance（重要度、0-100）：株価・市場への影響範囲の広さで判断してください。\n"
-        "confidence（信頼度、0-1）：情報源の一次性・公式性"
-        "（決算短信等の一次情報＞大手報道機関＞二次的なまとめ記事）で判断してください。\n\n"
-        "submit_structured_newsツールを使って結果を送信してください。"
-    )
 
 
 class ClaudeStructurer(NewsStructurer):
