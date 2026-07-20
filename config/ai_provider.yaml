@@ -1,0 +1,7 @@
+# layer3_news_processing_design.md §6・§14確定事項どおり。
+# Layer2/Layer5と共通の設定ファイル（現時点ではLayer3のnews_structurerセクションのみ）。
+
+news_structurer:
+  provider: claude          # claude / gpt / gemini / local（Ver1確定：claude）
+  model: claude-haiku-4-5   # 安価な小型モデルを採用（構造化は高度な推論を要しないため）
+  batch_size: 5

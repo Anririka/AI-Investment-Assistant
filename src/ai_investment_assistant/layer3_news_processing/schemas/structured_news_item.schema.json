@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StructuredNewsItem",
+  "description": "layer3_news_processing_design.md §8の確定仕様",
+  "type": "object",
+  "required": [
+    "news_schema_version", "item_id", "headline", "source_name", "source_url",
+    "source_data_origin", "published_at", "fetched_at", "age_hours", "category",
+    "affected_companies", "affected_sectors", "impact_direction", "impact_horizon",
+    "importance", "importance_llm_raw", "importance_source", "confidence",
+    "confidence_reason", "summary", "llm_provider", "llm_model", "structuring_status"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "news_schema_version": { "type": "string" },
+    "item_id": { "type": "string" },
+    "headline": { "type": "string" },
+    "source_name": { "type": "string" },
+    "source_url": { "type": "string" },
+    "source_data_origin": { "type": "string", "enum": ["newsapi", "gdelt", "web_search_fallback"] },
+    "published_at": { "type": "string" },
+    "fetched_at": { "type": "string" },
+    "age_hours": { "type": "number", "minimum": 0 },
+    "category": { "type": "string" },
+    "affected_companies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ticker", "name", "relevance"],
+        "properties": {
+          "ticker": { "type": "string" },
+          "name": { "type": "string" },
+          "relevance": { "type": "string", "enum": ["primary", "secondary"] }
+        }
+      }
+    },
+    "affected_sectors": { "type": "array", "items": { "type": "string" } },
+    "impact_direction": { "type": "string", "enum": ["positive", "negative", "neutral"] },
+    "impact_horizon": { "type": "string", "enum": ["short_term", "mid_term", "long_term"] },
+    "importance": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "importance_llm_raw": { "type": "integer", "minimum": 0, "maximum": 100 },
+    "importance_source": { "type": "string", "enum": ["llm", "rule_floor_applied"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "confidence_reason": { "type": "string" },
+    "summary": { "type": "string", "maxLength": 80 },
+    "llm_provider": { "type": "string" },
+    "llm_model": { "type": "string" },
+    "structuring_status": { "type": "string", "enum": ["success", "fallback_default", "skipped"] }
+  }
+}

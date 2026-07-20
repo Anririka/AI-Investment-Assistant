@@ -109,3 +109,18 @@ def test_all_candidates_failing_raises_all_sources_failed_error():
         chain.call("get_daily_prices", "7203")
 
     assert len(exc_info.value.errors) == 2
+
+
+def test_last_source_used_reflects_the_candidate_that_succeeded():
+    first = FakeRepo([RateLimitError("429")])
+    second = FakeRepo(["ok-from-second"])
+    chain = FallbackChainRepository(
+        [ChainCandidate("first", first), ChainCandidate("second", second)],
+        sleep=_no_sleep,
+    )
+
+    assert chain.last_source_used is None  # 呼び出し前はNone
+
+    chain.call("get_daily_prices", "7203")
+
+    assert chain.last_source_used == "second"

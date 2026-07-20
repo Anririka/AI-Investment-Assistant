@@ -46,12 +46,18 @@ class FallbackChainRepository:
             raise ValueError("candidates must not be empty")
         self._candidates = candidates
         self._sleep = sleep
+        # 直近のcall()で実際に使用した候補名（Layer3のsource_data_origin等、Repository
+        # パターンの原則を崩さずに「どの候補が成功したか」を知りたい呼び出し元のための
+        # 付加的な状態。戻り値の契約自体は変更しない、後方互換の拡張）。
+        self.last_source_used: Optional[str] = None
 
     def call(self, method_name: str, *args: Any, **kwargs: Any) -> Any:
         """`method_name`を先頭候補から順に呼び出し、成功した結果をそのまま返す。
 
         使用したソース名等のメタ情報は、各Repository実装がモデルの`DataFetchMeta`に
         埋め込む前提（`source_used`等）とし、本メソッドはロジック分岐のみを担う。
+        呼び出し元が「どの候補が成功したか」を知りたい場合は、呼び出し直後に
+        `last_source_used`を参照できる（例：Layer3の`source_data_origin`記録用）。
         全候補失敗時はAllSourcesFailedErrorを送出する。
         データ不存在（NotFoundError）はフォールバックせず、そのまま呼び出し元に伝播する。
         """
@@ -63,7 +69,9 @@ class FallbackChainRepository:
                 try:
                     if candidate.rate_limiter is not None:
                         candidate.rate_limiter.acquire()
-                    return method(*args, **kwargs)
+                    result = method(*args, **kwargs)
+                    self.last_source_used = candidate.name
+                    return result
                 except NotFoundError:
                     # データ不存在は次候補でも存在しない可能性が高いためフォールバックしない（5-1）
                     raise

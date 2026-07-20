@@ -1,0 +1,10 @@
+# layer3_news_processing_design.md §4-1の確定仕様どおり。
+# LLM構造化前に、明らかに情報価値の無い記事を機械的に除外する。
+
+min_body_length_chars: 100    # 前処理後の本文文字数がこれ未満なら除外
+reject_title_only: true       # 本文が空でタイトルのみの記事は除外
+reject_fetch_failure: true    # Layer1側で本文取得に失敗した記事は除外
+
+ad_page_detection:
+  enabled: true
+  keyword_patterns: ["広告", "PR企画", "スポンサードコンテンツ", "[Sponsored]"]
