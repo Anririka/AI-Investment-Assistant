@@ -16,7 +16,7 @@ from typing import Any, Callable, Optional, Union
 
 import yaml
 
-from .caching import CacheStore, CachingRepositoryDecorator, InMemoryCacheStore
+from .caching import CacheStore, CachingRepositoryDecorator, build_default_cache_store
 from .fallback import ChainCandidate, FallbackChainRepository
 from .ratelimit import RateLimiter
 
@@ -84,7 +84,8 @@ class RepositoryFactory:
 
     def __init__(self, config: dict, cache_store: Optional[CacheStore] = None) -> None:
         self._config = config
-        self._cache_store = cache_store or InMemoryCacheStore()
+        # 明示的に指定が無ければ、環境変数の有無でGoogle Drive実装/インメモリ実装を自動選択する
+        self._cache_store = cache_store or build_default_cache_store()
 
     @classmethod
     def from_yaml(

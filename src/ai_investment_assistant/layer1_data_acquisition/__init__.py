@@ -8,9 +8,10 @@
   exceptions.py   エラー分類に対応する例外階層（実装済み、5-1）
   ratelimit.py    共通レートリミッタ（実装済み、6-2）
   fallback.py     FallbackChainRepository（実装済み、5章）
-  caching.py      CachingRepositoryDecorator（実装済み、6章・7章。永続化はGoogle Drive
-                  実装への差し替えを前提としたCacheStore抽象化のみ済み、実際の
-                  GoogleDriveCacheStoreはPhase1後半で実装）
+  caching.py      CachingRepositoryDecorator（実装済み、6章・7章）。GoogleDriveCacheStore
+                  （本番の永続キャッシュ、実行終了時にflush()でDriveへ書き戻す）と
+                  InMemoryCacheStore（テスト・ローカル開発用）の両方を実装済み。
+                  build_default_cache_store()が環境変数の有無で自動選択する。
   factory.py      RepositoryFactory（実装済み、3-2・3-3）
   repositories/   具体Repository実装
                     jquants.py         実装済み（V2 APIキー方式、日本株）
@@ -22,7 +23,6 @@
                     web_search_fallback.py  未実装（採用する検索手段が未決定のため保留）
 
 未実装・要検討事項:
-  - GoogleDriveCacheStore（本番の永続キャッシュ実装、現状はInMemoryCacheStoreのみ）
   - web_search_fallback.py（どの検索APIを使うか未決定）
   - 各具体Repositoryのレスポンスフィールド名は、ライブAPIでの疎通確認前の
     二次情報ベースの実装であり、実行結果を見ての微調整を要する可能性がある

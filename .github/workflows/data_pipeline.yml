@@ -35,3 +35,16 @@ jobs:
           GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
         run: python scripts/phase0_smoke_test.py
+
+      - name: Layer1 live data check (real APIs, small sample)
+        # モックテストでは検証できない、実ライブAPIレスポンスとのフィールド名の
+        # ズレを早期発見するための疎通確認。失敗してもジョブ全体は失敗させない
+        # （フィールド名調整が必要なだけの場合があるため。ログを確認して対応する）。
+        continue-on-error: true
+        env:
+          JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
+        run: python scripts/layer1_live_check.py
