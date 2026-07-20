@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run unit tests (Layer1 + Layer2)
+      - name: Run unit tests (Layer1 + Layer2 + Layer3)
         run: pytest tests -v
 
       - name: Phase0 smoke test (config load + Google Drive connectivity)
