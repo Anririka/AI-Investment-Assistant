@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "layer4_completed",
+  "description": "layer4_persistence_design.md §8-2。Layer5詳細設計書§3-1の構造をそのまま採用。",
+  "type": "object",
+  "required": ["completed", "completed_at", "layer_status"],
+  "properties": {
+    "completed": { "type": "boolean" },
+    "completed_at": { "type": "string" },
+    "layer_status": {
+      "type": "object",
+      "required": ["layer1", "layer2", "layer3", "layer4"],
+      "properties": {
+        "layer1": { "enum": ["success", "failed", "not_started"] },
+        "layer2": { "enum": ["success", "failed", "not_started"] },
+        "layer3": { "enum": ["success", "failed", "not_started"] },
+        "layer4": { "enum": ["success", "failed", "not_started"] }
+      }
+    },
+    "snapshot_path": { "type": ["string", "null"] },
+    "failure_reason_code": { "type": "string" }
+  }
+}

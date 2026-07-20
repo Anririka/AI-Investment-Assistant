@@ -1,7 +1,8 @@
 # Layer1〜4（データ取得〜永続化）を実行するGitHub Actionsパイプライン。
 # Phase0のsmoke test（環境構築・Secrets・Google Drive連携の確認）に加え、
-# Phase1（Layer1）・Phase2（Layer2）のユニットテスト（tests/以下すべて）もここで自動実行する。
-# Layer1〜2の本番実行ステップ（実データ取得〜スコアリング）は、Layer4完成後にここへ追加する。
+# Phase1〜4（Layer1〜Layer4）のユニットテスト（tests/以下すべて）もここで自動実行する。
+# Layer1〜4を実際に通しで実行する本番ステップ（実データ取得〜永続化）は、
+# Layer5（Claude Coworkセッション側）の実装が固まった時点でここへ追加する。
 
 name: Data Pipeline (Layer1-4)
 
@@ -27,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run unit tests (Layer1 + Layer2 + Layer3)
+      - name: Run unit tests (Layer1 + Layer2 + Layer3 + Layer4)
         run: pytest tests -v
 
       - name: Phase0 smoke test (config load + Google Drive connectivity)

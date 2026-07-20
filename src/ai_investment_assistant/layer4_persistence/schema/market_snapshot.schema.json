@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "market_snapshot",
+  "description": "layer4_persistence_design.md §8-1。トップレベル形式のみを検証する（内部詳細はLayer2の責務）。",
+  "type": "object",
+  "required": ["run_meta", "regime", "macro", "candidates", "excluded_summary"],
+  "properties": {
+    "run_meta": { "type": "object" },
+    "regime": { "type": "object" },
+    "macro": { "type": "object" },
+    "candidates": { "type": "array" },
+    "excluded_summary": { "type": "array" }
+  }
+}
