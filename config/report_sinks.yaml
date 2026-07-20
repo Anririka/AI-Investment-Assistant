@@ -1,0 +1,16 @@
+# layer6_report_generation_design.md §11の確定仕様。
+#
+# 有効化するSinkの一覧（優先順位順）。Sinkの追加・削除・差し替えは本ファイルの編集
+# のみで完結し、presentation_model.py・formatters/配下には一切変更を要しない設計。
+#
+# 優先順位（§14確定事項3）：①Google Sheets（運用・履歴管理）②Markdown（人が読む
+# レポート）③PDF（共有・保管用途、将来）④Notion（将来）⑤Slack（将来）⑥メール（将来）
+# ⑦LINE（将来）。Ver1（今回の実装対象）はGoogle SheetsとMarkdownの2つのみ。
+enabled_sinks:
+  - google_sheets   # 優先度1：運用・履歴管理（Ver1実装対象）
+  - markdown        # 優先度2：人が読むレポート（Ver1実装対象）
+  # - pdf           # 優先度3：共有・保管用途（将来、未実装）
+  # - notion        # 優先度4（将来、未実装）
+  # - slack         # 優先度5（将来、未実装）
+  # - email         # 優先度6（将来、未実装）
+  # - line          # 優先度7（将来、未実装）
