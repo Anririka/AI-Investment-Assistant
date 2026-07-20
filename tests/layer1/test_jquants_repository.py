@@ -1,9 +1,9 @@
 """JQuantsRepositoryのテスト（requests.getをモックし、V2 APIキー方式を検証する）。
 
-注意：ここでのレスポンスJSONの形は実装時点の想定であり、実際のV2 APIレスポンスとの
-突合はまだ行えていない（jquants.pyのモジュールdocstring参照）。本テストは、想定した
-形のレスポンスに対して本Repositoryのパース・正規化・エラー分類ロジックが正しく動作
-することを保証するものである。
+get_daily_pricesのレスポンス形式は、GitHub Actions上でのライブ疎通確認
+（2026-07-20、トヨタ自動車7203、config: plan=light）で得られた実際のレスポンスを
+そのまま反映している（test_get_daily_prices_parses_real_jquants_v2_response参照）。
+それ以外のメソッド（get_fundamentals等）はまだライブ検証できていない想定ベースの形。
 """
 
 from datetime import date
@@ -54,9 +54,20 @@ def test_get_daily_prices_parses_normalized_series(mock_get):
     mock_get.return_value = FakeResponse(
         200,
         {
-            "bars": [
-                {"date": "2026-07-16", "open": 100.0, "high": 105.0, "low": 98.0, "close": 103.0, "volume": 1_000_000},
-                {"date": "2026-07-17", "open": 103.0, "high": 108.0, "low": 101.0, "close": 106.0, "volume": 1_200_000},
+            # ライブ疎通確認（scripts/layer1_live_check.py）で確認した実際のV2レスポンス形式
+            "data": [
+                {
+                    "Date": "2026-07-16", "Code": "72030",
+                    "O": 100.0, "H": 105.0, "L": 98.0, "C": 103.0, "Vo": 1_000_000.0, "Va": 103_000_000.0,
+                    "UL": "0", "LL": "0", "AdjFactor": 1.0,
+                    "AdjO": 100.0, "AdjH": 105.0, "AdjL": 98.0, "AdjC": 103.0, "AdjVo": 1_000_000.0,
+                },
+                {
+                    "Date": "2026-07-17", "Code": "72030",
+                    "O": 103.0, "H": 108.0, "L": 101.0, "C": 106.0, "Vo": 1_200_000.0, "Va": 127_200_000.0,
+                    "UL": "0", "LL": "0", "AdjFactor": 1.0,
+                    "AdjO": 103.0, "AdjH": 108.0, "AdjL": 101.0, "AdjC": 106.0, "AdjVo": 1_200_000.0,
+                },
             ]
         },
     )
@@ -70,6 +81,44 @@ def test_get_daily_prices_parses_normalized_series(mock_get):
     assert series.bars[0].close == 103.0
     assert series.meta.source_used == "jquants"
     assert series.meta.is_delayed is False
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_daily_prices_parses_real_jquants_v2_response(mock_get):
+    """2026-07-20のGitHub Actionsライブ疎通確認で実際に返ってきたレスポンスの抜粋（トヨタ自動車7203）。
+
+    このテストが失敗する場合、J-Quants側がレスポンス形式を変更した可能性があるため、
+    再度ライブ確認のうえフィールド名マッピングを見直すこと。
+    """
+    mock_get.return_value = FakeResponse(
+        200,
+        {
+            "data": [
+                {
+                    "Date": "2026-07-06", "Code": "72030",
+                    "O": 2855.0, "H": 2923.0, "L": 2839.0, "C": 2923.0,
+                    "UL": "0", "LL": "0", "Vo": 26728000.0, "Va": 77519359100.0, "AdjFactor": 1.0,
+                    "AdjO": 2855.0, "AdjH": 2923.0, "AdjL": 2839.0, "AdjC": 2923.0, "AdjVo": 26728000.0,
+                },
+                {
+                    "Date": "2026-07-07", "Code": "72030",
+                    "O": 2950.0, "H": 2980.0, "L": 2925.0, "C": 2946.0,
+                    "UL": "0", "LL": "0", "Vo": 36408300.0, "Va": 107398051750.0, "AdjFactor": 1.0,
+                    "AdjO": 2950.0, "AdjH": 2980.0, "AdjL": 2925.0, "AdjC": 2946.0, "AdjVo": 36408300.0,
+                },
+            ]
+        },
+    )
+    repo = JQuantsRepository(api_key="k", plan="light", price_delay_weeks=0)
+
+    series = repo.get_daily_prices("7203", date(2026, 7, 6), date(2026, 7, 7))
+
+    assert len(series.bars) == 2
+    assert series.bars[0].date == date(2026, 7, 6)
+    assert series.bars[0].open == 2855.0
+    assert series.bars[0].close == 2923.0
+    assert series.bars[0].volume == 26728000
+    assert series.bars[1].close == 2946.0
 
     called_headers = mock_get.call_args.kwargs["headers"]
     assert called_headers == {"x-api-key": "k"}

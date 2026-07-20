@@ -3,14 +3,15 @@
 J-Quants V2 API（APIキー方式、`x-api-key`ヘッダー）を使用する。V1のメールアドレス・
 パスワードによるリフレッシュトークン認証は使用しない。
 
-注意（重要）：このファイル作成時点では、J-Quants V2 APIの実際のレスポンスJSONの
-フィールド名を筆者（Claude）は直接確認できていない（ライブAPIキーへのアクセス権を
-持たないため）。二次情報から妥当と考えられる項目名で実装しているが、実際に
-GitHub Actions等でこのRepositoryを実行した結果（レスポンスJSONの実物、またはエラー
-メッセージ）を共有いただければ、`_request`が返す辞書のキー名マッピングを実物に
-合わせて調整する。ここではHTTPステータスコードに基づくエラー分類（5-1）と、
-Repositoryとしての責務分担（正規化・フォールバック非対応部分の切り出し）を正しく
-実装することを優先している。
+注意：get_daily_pricesのフィールド名は、GitHub Actions上でのライブ疎通確認
+（scripts/layer1_live_check.pyのデバッグ出力）で得られた実際のV2レスポンスに
+合わせて修正済み（トップレベルキーは`bars`ではなく`data`、各項目は
+`Date`/`O`/`H`/`L`/`C`/`Vo`という短縮フィールド名で、分割調整後の
+`AdjO`/`AdjH`/`AdjL`/`AdjC`/`AdjVo`も含まれる。株式分割時の連続性を優先し、
+調整後値（Adj*）を正規化後のPriceBarとして採用している）。
+get_fundamentals・get_listed_universe・get_trading_calendar・
+get_earnings_calendarは、get_daily_pricesと異なりまだライブ検証できていない
+ため、フィールド名は引き続き二次情報ベースの想定であることに注意。
 """
 
 from __future__ import annotations
@@ -89,14 +90,15 @@ class JQuantsRepository(MarketDataRepository):
         )
         bars = tuple(
             PriceBar(
-                date=datetime.strptime(row["date"], "%Y-%m-%d").date(),
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=int(row["volume"]),
+                date=datetime.strptime(row["Date"], "%Y-%m-%d").date(),
+                # 株式分割等をまたいだ連続性のため、調整後値（Adj*）を採用する
+                open=float(row["AdjO"]),
+                high=float(row["AdjH"]),
+                low=float(row["AdjL"]),
+                close=float(row["AdjC"]),
+                volume=int(row["AdjVo"]),
             )
-            for row in payload.get("bars", [])
+            for row in payload.get("data", [])
         )
         meta = DataFetchMeta(
             source_used="jquants",
