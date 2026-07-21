@@ -1,0 +1,48 @@
+# Layer8（自己評価層）を実行するGitHub Actionsパイプライン
+# （layer8_self_evaluation_design.md §1・§4）。
+#
+# Layer8はAIによる新たな投資判断を一切行わない決定的Python処理であり、
+# 「Layer7完了後に続けて実行される独立したスケジュールジョブ」として設計されている
+# （§1）。Layer7の完了フラグ（tracking/layer7_completed_YYYYMMDD.json）を起動直後に
+# 確認するため（§4-3）、実運用では本ワークフローをtracking_pipeline.ymlの後続に
+# 位置づける（例：Layer7のジョブ完了後、一定時間を空けて実行、またはworkflow_run
+# トリガーでの連結を将来検討）。
+#
+# 現時点ではユニットテストのみを自動実行する。Layer8の実際の実行ステップ（Google Drive
+# 上のevaluation/*.json・Layer6/Layer7が保存した成果物への実アクセス）は、全体テスト
+# 完了後にsecrets設定を確認したうえでここへ追加する（data_pipeline.ymlのLayer1〜4
+# 本番ステップと同じ方針）。
+#
+# concurrency設定：evaluation/配下の各JSONファイルはread-modify-write方式で更新するため、
+# 同一実行単位が重複起動しないことを前提とする（§6）。
+
+name: Self Evaluation (Layer8)
+
+on:
+  workflow_dispatch: {}
+  # 全体テスト完了後、Layer7完了後のタイミングを確定してから有効化する
+  # （例：Layer7の実行完了を見込める時刻、毎営業日 16:00 JST = 07:00 UTC）。
+  # schedule:
+  #   - cron: "0 7 * * 1-5"
+
+concurrency:
+  group: layer8-evaluation
+  cancel-in-progress: false
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests (Layer8)
+        run: pytest tests/layer8 -v

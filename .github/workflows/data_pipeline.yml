@@ -11,10 +11,12 @@
 # layer6_report_generation_design.md §0）。ここでテストしているのは、それぞれが
 # Bashツールで呼び出す決定的計算処理（scripts/*.py・formatters/等）のみ。
 #
-# Layer7（提案トラッキング層）はLayer1〜4と同様、GitHub Actions上で動く独立した
-# Pythonパイプラインである（layer7_proposal_tracking_design.md §1）が、Layer5/Layer6とは
-# 非同期の独自スケジュールで稼働するため、実行ジョブ自体は本ワークフローではなく
-# 別ファイル（tracking_pipeline.yml）に分離してある。ユニットテストのみここで実行する。
+# Layer7（提案トラッキング層）・Layer8（自己評価層）はLayer1〜4と同様、GitHub Actions
+# 上で動く独立したPythonパイプラインである（layer7_proposal_tracking_design.md §1、
+# layer8_self_evaluation_design.md §1）が、Layer5/Layer6とは非同期の独自スケジュール
+# （Layer8はLayer7完了後に続けて実行）で稼働するため、実行ジョブ自体は本ワークフロー
+# ではなく別ファイル（tracking_pipeline.yml・evaluation_pipeline.yml）に分離してある。
+# ユニットテストのみここで実行する。
 
 name: Data Pipeline (Layer1-4)
 
@@ -40,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run unit tests (Layer1 + Layer2 + Layer3 + Layer4 + Layer5 scripts + Layer6 scripts + Layer7)
+      - name: Run unit tests (Layer1 + Layer2 + Layer3 + Layer4 + Layer5 scripts + Layer6 scripts + Layer7 + Layer8)
         run: pytest tests -v
 
       - name: Phase0 smoke test (config load + Google Drive connectivity)

@@ -1,0 +1,23 @@
+# layer8_self_evaluation_design.md §7-1-2・§10の確定仕様。
+#
+# セグメント集計（reason_code別・score帯別等）に付与するconfidenceラベルを、
+# サンプル数（該当セグメントのクローズ件数）に応じて機械的に決定するための閾値。
+confidence_thresholds:
+  low_sample: { max_count: 9 }                      # 0〜9件
+  medium_sample: { min_count: 10, max_count: 29 }   # 10〜29件
+  normal: { min_count: 30 }                          # 30件以上
+
+# 統計的に信頼できると推奨される最低サンプル数（feedback_YYYYMM.jsonの
+# sample_size.min_recommended_sample_for_confidence、§8）。
+min_recommended_sample_for_confidence: 30
+
+# weight_adjustment_suggestions生成のための閾値（§10「将来調整可能にする」設定）。
+# reason_code別の勝率が全体勝率からこの値（比率、0.1=10ポイント）以上乖離した場合のみ
+# 提案を生成する。閾値未満の乖離では提案自体を生成しない（ノイズの多い提案を避けるため）。
+#
+# 重要：この閾値・target_configの導出方法（reason_codeの接頭辞からscoring_weights.yamlの
+# パスへの対応付け）は設計書に具体的なアルゴリズムの明記が無いため、実装上の合理的な
+# 補完として本ファイルに定義した（layer8_self_evaluation_design.md §8の例を再現できる
+# 最小限のヒューリスティックであり、いずれにせよ`review_status: pending_human_review`で
+# 人間レビューを必須とするため、提案の生成自体が投資判断に直結することはない）。
+weight_suggestion_win_rate_diff_threshold: 0.05
