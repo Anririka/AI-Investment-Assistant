@@ -1,0 +1,47 @@
+# Layer7（提案トラッキング層）を実行するGitHub Actionsパイプライン
+# （layer7_proposal_tracking_design.md §1・§4）。
+#
+# Layer7はAI判断を一切行わない純粋な決定的Python処理であり、Layer5/Layer6の実行タイミング
+# （Claude Coworkのスケジュールタスク）とは非同期に、独自スケジュール（例：毎営業日の
+# 取引終了後）でGitHub Actions上で稼働する（§1）。Layer1〜4のパイプライン（data_pipeline.yml）
+# とは別ファイルに分離しているのはこのため。
+#
+# 現時点ではユニットテストのみを自動実行する。Layer7の実際の実行ステップ（Google Drive
+# 上のtracking/*.json・Layer6が保存したGoogle Sheetsへの実アクセス）は、全体テスト完了後に
+# secrets設定を確認したうえでここへ追加する（data_pipeline.ymlのLayer1〜4本番ステップと
+# 同じ方針）。
+#
+# concurrency設定：tracking/配下の各JSONファイルはread-modify-write方式で更新するため、
+# 同一実行単位が重複起動しないことを前提とする（§6-6）。同一ブランチでの重複実行を
+# GitHub Actions側で防止するため、concurrencyグループを設定する。
+
+name: Proposal Tracking (Layer7)
+
+on:
+  workflow_dispatch: {}
+  # 全体テスト完了後、実運用スケジュールを確定してから有効化する（例：毎営業日 15:30 JST
+  # = 06:30 UTC、日本市場の取引終了後）。
+  # schedule:
+  #   - cron: "30 6 * * 1-5"
+
+concurrency:
+  group: layer7-tracking
+  cancel-in-progress: false
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests (Layer7)
+        run: pytest tests/layer7 -v

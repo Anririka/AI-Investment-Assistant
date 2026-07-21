@@ -4,12 +4,17 @@
 # Layer1〜4を実際に通しで実行する本番ステップ（実データ取得〜永続化）は、
 # Layer5（Claude Coworkセッション側）の実装が固まった時点でここへ追加する。
 #
-# 注意：tests/layer5/・tests/layer6/ 配下のユニットテストもこの pytest ステップで
-# 一緒に実行される。ただしLayer5（AI Agent実行層）・Layer6（レポート生成層、Ver1では
-# Layer5と同一Cowork セッション内で継続実行）はいずれもGitHub Actions上では動かず、
+# 注意：tests/layer5/・tests/layer6/・tests/layer7/ 配下のユニットテストもこの
+# pytest ステップで一緒に実行される。Layer5（AI Agent実行層）・Layer6（レポート生成層、
+# Ver1ではLayer5と同一Coworkセッション内で継続実行）はいずれもGitHub Actions上では動かず、
 # Claude Coworkのスケジュールタスク側で稼働する（layer5_ai_judgment_design.md §0、
 # layer6_report_generation_design.md §0）。ここでテストしているのは、それぞれが
 # Bashツールで呼び出す決定的計算処理（scripts/*.py・formatters/等）のみ。
+#
+# Layer7（提案トラッキング層）はLayer1〜4と同様、GitHub Actions上で動く独立した
+# Pythonパイプラインである（layer7_proposal_tracking_design.md §1）が、Layer5/Layer6とは
+# 非同期の独自スケジュールで稼働するため、実行ジョブ自体は本ワークフローではなく
+# 別ファイル（tracking_pipeline.yml）に分離してある。ユニットテストのみここで実行する。
 
 name: Data Pipeline (Layer1-4)
 
@@ -35,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run unit tests (Layer1 + Layer2 + Layer3 + Layer4 + Layer5 scripts + Layer6 scripts)
+      - name: Run unit tests (Layer1 + Layer2 + Layer3 + Layer4 + Layer5 scripts + Layer6 scripts + Layer7)
         run: pytest tests -v
 
       - name: Phase0 smoke test (config load + Google Drive connectivity)
