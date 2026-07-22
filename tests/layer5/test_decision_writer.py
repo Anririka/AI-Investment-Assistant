@@ -1,11 +1,15 @@
 """decision_writer.pyのテスト（layer5_ai_judgment_design.md §3-2・§9、§12テスト方針）。"""
 
+import json
+
 import pytest
 
+from ai_investment_assistant.layer5_ai_judgment.scripts import decision_writer
 from ai_investment_assistant.layer5_ai_judgment.scripts.decision_writer import (
     build_decision_document,
     compact_timestamp,
     decision_file_name,
+    main,
     write_decision,
 )
 from ai_investment_assistant.layer5_ai_judgment.scripts.schema_validator import SchemaValidationError
@@ -74,3 +78,51 @@ def test_write_decision_rejects_invalid_document():
     with pytest.raises(SchemaValidationError):
         write_decision(client, invalid)
     assert client.saved == {}
+
+
+def test_main_without_local_data_dir_reports_error(monkeypatch, capsys):
+    monkeypatch.delenv("LAYER5_LOCAL_DATA_DIR", raising=False)
+    exit_code = main()
+    assert exit_code == 1
+    assert "LAYER5_LOCAL_DATA_DIR" in capsys.readouterr().out
+
+
+def test_main_reads_from_file_path_and_writes_locally(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LAYER5_LOCAL_DATA_DIR", str(tmp_path))
+    input_path = tmp_path / "decision_input.json"
+    input_path.write_text(json.dumps(_valid_document()), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["decision_writer.py", str(input_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["drive_file_name"] == "decision_20260718T063440Z.json"
+    assert output["drive_subfolder"] == "decisions"
+    assert (tmp_path / "decisions" / "decision_20260718T063440Z.json").exists()
+
+
+def test_main_reads_from_stdin_when_no_argv(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LAYER5_LOCAL_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("sys.argv", ["decision_writer.py"])
+    monkeypatch.setattr("sys.stdin", __import__("io").StringIO(json.dumps(_valid_document())))
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert (tmp_path / "decisions" / "decision_20260718T063440Z.json").exists()
+
+
+def test_main_reports_schema_validation_error_without_writing(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("LAYER5_LOCAL_DATA_DIR", str(tmp_path))
+    invalid = _valid_document()
+    del invalid["proposals"]
+    input_path = tmp_path / "invalid.json"
+    input_path.write_text(json.dumps(invalid), encoding="utf-8")
+    monkeypatch.setattr("sys.argv", ["decision_writer.py", str(input_path)])
+
+    exit_code = main()
+
+    assert exit_code == 1
+    assert "error" in json.loads(capsys.readouterr().out)
+    assert not (tmp_path / "decisions").exists()

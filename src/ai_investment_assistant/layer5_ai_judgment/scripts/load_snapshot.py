@@ -170,8 +170,6 @@ def run_load_snapshot(
 
 
 def main() -> int:
-    from .drive_client import Layer5DriveClient
-
     date_str = sys.argv[1] if len(sys.argv) > 1 else datetime.now(timezone.utc).strftime("%Y%m%d")
     run_started_at_env = os.environ.get("LAYER5_RUN_STARTED_AT")
     run_started_at = (
@@ -179,17 +177,28 @@ def main() -> int:
         if run_started_at_env
         else datetime.now(timezone.utc)
     )
-
-    service_account_json = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "")
-    folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
     policy = load_policy()
 
-    if not service_account_json or not folder_id:
-        print(json.dumps({"status": "blocked", "reason_code": "PORTFOLIO_STATE_INVALID",
-                           "error": "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/GOOGLE_DRIVE_FOLDER_ID未設定"}))
-        return 1
+    # LAYER5_LOCAL_DATA_DIRが設定されている場合、Google Drive MCPコネクタ経由で
+    # エージェントが既に取得済みのローカルファイルを読む（Coworkサンドボックスの
+    # googleapis.comネットワーク遮断への対応。local_drive_client.py参照）。
+    local_data_dir = os.environ.get("LAYER5_LOCAL_DATA_DIR")
+    if local_data_dir:
+        from .local_drive_client import LocalDriveClient
 
-    client = Layer5DriveClient(service_account_json=service_account_json, root_folder_id=folder_id)
+        client = LocalDriveClient(base_dir=local_data_dir)
+    else:
+        from .drive_client import Layer5DriveClient
+
+        service_account_json = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "")
+        folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
+        if not service_account_json or not folder_id:
+            print(json.dumps({"status": "blocked", "reason_code": "PORTFOLIO_STATE_INVALID",
+                               "error": "LAYER5_LOCAL_DATA_DIR、または"
+                               "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/GOOGLE_DRIVE_FOLDER_IDが未設定"}))
+            return 1
+        client = Layer5DriveClient(service_account_json=service_account_json, root_folder_id=folder_id)
+
     result = run_load_snapshot(client, date_str=date_str, now=datetime.now(timezone.utc),
                                 run_started_at=run_started_at, policy=policy)
     print(json.dumps(result, ensure_ascii=False, default=str))

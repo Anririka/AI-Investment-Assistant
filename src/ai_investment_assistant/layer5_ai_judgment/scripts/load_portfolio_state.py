@@ -169,19 +169,28 @@ def run_load_portfolio_state(
 
 
 def main() -> int:
-    from .drive_client import Layer5DriveClient
-
-    service_account_json = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "")
-    folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
     capital_policy = load_capital_policy()
     sector_mapping = load_sector_mapping()
 
-    if not service_account_json or not folder_id:
-        print(json.dumps({"status": "blocked", "reason_code": "PORTFOLIO_STATE_INVALID",
-                           "error": "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/GOOGLE_DRIVE_FOLDER_ID未設定"}))
-        return 1
+    # LAYER5_LOCAL_DATA_DIRが設定されている場合、Google Drive MCPコネクタ経由で
+    # エージェントが既に取得済みのローカルファイルを読む（local_drive_client.py参照）。
+    local_data_dir = os.environ.get("LAYER5_LOCAL_DATA_DIR")
+    if local_data_dir:
+        from .local_drive_client import LocalDriveClient
 
-    client = Layer5DriveClient(service_account_json=service_account_json, root_folder_id=folder_id)
+        client = LocalDriveClient(base_dir=local_data_dir)
+    else:
+        from .drive_client import Layer5DriveClient
+
+        service_account_json = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "")
+        folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
+        if not service_account_json or not folder_id:
+            print(json.dumps({"status": "blocked", "reason_code": "PORTFOLIO_STATE_INVALID",
+                               "error": "LAYER5_LOCAL_DATA_DIR、または"
+                               "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/GOOGLE_DRIVE_FOLDER_IDが未設定"}))
+            return 1
+        client = Layer5DriveClient(service_account_json=service_account_json, root_folder_id=folder_id)
+
     result = run_load_portfolio_state(client, capital_policy, sector_mapping)
     print(json.dumps(result, ensure_ascii=False, default=str))
     return 0
