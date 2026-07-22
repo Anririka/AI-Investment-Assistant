@@ -145,6 +145,56 @@ def test_error_status_codes_map_to_expected_exceptions(mock_get, status_code, ex
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_fundamentals_calls_fins_summary_endpoint_and_parses_fields(mock_get):
+    """2026-07-22のライブ実行で判明した誤りの回帰テスト：`/fins/summary`を正しく叩き、
+    実際のフィールド名（DiscDate/CurPerType/Sales/OP/NP/EPS/TA/Eq/CFO/DivAnn）を
+    FundamentalSnapshotへ正しくマッピングすること。
+    """
+    mock_get.return_value = FakeResponse(
+        200,
+        {
+            "fins_summary": [
+                {
+                    "DiscDate": "2026-05-10", "CurPerType": "FY", "Sales": 45_000_000_000_000.0,
+                    "OP": 5_000_000_000_000.0, "NP": 4_500_000_000_000.0, "EPS": 350.5,
+                    "TA": 70_000_000_000_000.0, "Eq": 30_000_000_000_000.0,
+                    "CFO": 6_000_000_000_000.0, "DivAnn": 90.0,
+                }
+            ]
+        },
+    )
+    repo = JQuantsRepository(api_key="k")
+
+    fundamentals = repo.get_fundamentals("7203")
+
+    called_path = mock_get.call_args.args[0]
+    assert called_path == "https://api.jquants.com/v2/fins/summary"
+    assert fundamentals.fiscal_period == "FY"
+    assert fundamentals.revenue == 45_000_000_000_000.0
+    assert fundamentals.operating_income == 5_000_000_000_000.0
+    assert fundamentals.net_income == 4_500_000_000_000.0
+    assert fundamentals.eps == 350.5
+    assert fundamentals.total_assets == 70_000_000_000_000.0
+    assert fundamentals.net_assets == 30_000_000_000_000.0
+    assert fundamentals.operating_cash_flow == 6_000_000_000_000.0
+    assert fundamentals.dividend == 90.0
+    # 公式ドキュメントでフィールド名が確認できなかった項目は、推測で埋めずNoneのまま
+    assert fundamentals.capital_expenditure is None
+    assert fundamentals.interest_bearing_debt is None
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_fundamentals_handles_empty_response(mock_get):
+    mock_get.return_value = FakeResponse(200, {"fins_summary": []})
+    repo = JQuantsRepository(api_key="k")
+
+    fundamentals = repo.get_fundamentals("7203")
+
+    assert fundamentals.ticker == "7203"
+    assert fundamentals.eps is None
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
 def test_get_listed_universe_parses_ticker_info(mock_get):
     mock_get.return_value = FakeResponse(
         200,

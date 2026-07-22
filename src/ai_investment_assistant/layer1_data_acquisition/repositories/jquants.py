@@ -110,23 +110,41 @@ class JQuantsRepository(MarketDataRepository):
         return PriceSeries(ticker=ticker, currency="JPY", bars=bars, meta=meta)
 
     def get_fundamentals(self, ticker: str) -> FundamentalSnapshot:
-        payload = self._request("/equities/financials", params={"code": ticker})
-        rows = payload.get("financials", [])
+        """財務情報を取得する（V2 API `/fins/summary`）。
+
+        2026-07-22のGitHub Actionsライブ実行で、当初想定していた`/equities/financials`が
+        403「The requested endpoint does not exist」で失敗することが判明した。J-Quants
+        公式サイト（jpx-jquants.com/ja/spec/fin-summary）等の情報を基に、正しいV2の
+        財務情報エンドポイントである`/fins/summary`へ修正した（フィールド名も実際の
+        レスポンス構造 `DiscDate`／`CurPerType`／`Sales`／`OP`／`NP`／`EPS`／`TA`／`Eq`／
+        `CFO`／`DivAnn`に合わせて修正）。
+
+        注意（未確認の項目）：`capital_expenditure`（設備投資額）・
+        `interest_bearing_debt`（有利子負債）に対応するフィールド名は、公式ドキュメント
+        （無料プランで参照可能な範囲）から確認できなかった。誤ったフィールド名を
+        推測で埋めるより、確実に存在が確認できる範囲のみをマッピングし、この2項目は
+        Noneのまま返す（scoring_specification.md §4の欠損時再配分ルールにより、
+        該当サブ指標は同一軸内の他指標へ自動的に比例配分される）。有料プランの
+        `/fins/details`エンドポイントであれば取得できる可能性があるが、本リポジトリの
+        契約プラン（light）の範囲外のため未対応とする。
+        """
+        payload = self._request("/fins/summary", params={"code": ticker})
+        rows = payload.get("fins_summary", payload.get("summary", []))
         row = rows[0] if rows else {}
         meta = DataFetchMeta(source_used="jquants", fetched_at=datetime.utcnow())
         return FundamentalSnapshot(
             ticker=ticker,
-            fiscal_period=row.get("fiscal_period", ""),
-            eps=row.get("eps"),
-            net_assets=row.get("net_assets"),
-            net_income=row.get("net_income"),
-            revenue=row.get("revenue"),
-            operating_income=row.get("operating_income"),
-            operating_cash_flow=row.get("operating_cash_flow"),
-            capital_expenditure=row.get("capital_expenditure"),
-            interest_bearing_debt=row.get("interest_bearing_debt"),
-            total_assets=row.get("total_assets"),
-            dividend=row.get("dividend"),
+            fiscal_period=row.get("CurPerType", ""),
+            eps=row.get("EPS"),
+            net_assets=row.get("Eq"),
+            net_income=row.get("NP"),
+            revenue=row.get("Sales"),
+            operating_income=row.get("OP"),
+            operating_cash_flow=row.get("CFO"),
+            capital_expenditure=None,
+            interest_bearing_debt=None,
+            total_assets=row.get("TA"),
+            dividend=row.get("DivAnn"),
             meta=meta,
         )
 
@@ -144,7 +162,16 @@ class JQuantsRepository(MarketDataRepository):
         ]
 
     def get_trading_calendar(self) -> list[date]:
-        payload = self._request("/markets/trading_calendar")
+        """取引カレンダーを取得する（V2 API `/markets/calendar`）。
+
+        2026-07-22時点、当初想定していた`/markets/trading_calendar`は誤りである
+        可能性が高いことが二次情報（jpx-jquants.com/ja/spec/mkt-cal等）から判明した。
+        `/markets/calendar`へ修正したが、レスポンスのフィールド名（`calendar`／
+        `date`／`is_trading_day`）自体はまだライブ検証できていない想定ベースのため、
+        引き続き実地確認が必要（このメソッドはrun_daily_pipeline.pyからまだ
+        呼び出されていない）。
+        """
+        payload = self._request("/markets/calendar")
         return [
             datetime.strptime(row["date"], "%Y-%m-%d").date()
             for row in payload.get("calendar", [])
@@ -152,7 +179,15 @@ class JQuantsRepository(MarketDataRepository):
         ]
 
     def get_earnings_calendar(self) -> list[EarningsEvent]:
-        payload = self._request("/equities/earnings_calendar")
+        """決算発表予定日を取得する（V2 API `/equities/earnings-calendar`）。
+
+        2026-07-22時点、当初想定していた`/equities/earnings_calendar`（アンダースコア）は
+        誤りである可能性が高いことが二次情報（jpx-jquants.com/ja/spec/eq-earnings-cal等）
+        から判明した。`/equities/earnings-calendar`（ハイフン）へ修正したが、レスポンスの
+        フィールド名自体はまだライブ検証できていない想定ベースのため、引き続き実地確認が
+        必要（このメソッドはrun_daily_pipeline.pyからまだ呼び出されていない）。
+        """
+        payload = self._request("/equities/earnings-calendar")
         return [
             EarningsEvent(
                 ticker=row["code"],
