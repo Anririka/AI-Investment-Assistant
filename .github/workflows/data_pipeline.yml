@@ -2,7 +2,8 @@
 # Phase0のsmoke test（環境構築・Secrets・Google Drive連携の確認）に加え、
 # Phase1〜4（Layer1〜Layer4）のユニットテスト（tests/以下すべて）もここで自動実行する。
 # Layer1〜4を実際に通しで実行する本番ステップ（実データ取得〜永続化）は、
-# Layer5（Claude Coworkセッション側）の実装が固まった時点でここへ追加する。
+# Layer5（Claude Coworkセッション側）の実装が固まったため、scripts/run_daily_pipeline.py
+# として追加した（"Run daily pipeline"ステップ）。
 #
 # 注意：tests/layer5/・tests/layer6/・tests/layer7/ 配下のユニットテストもこの
 # pytest ステップで一緒に実行される。Layer5（AI Agent実行層）・Layer6（レポート生成層、
@@ -63,3 +64,18 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
         run: python scripts/layer1_live_check.py
+
+      - name: Run daily pipeline (Layer1 real fetch -> Layer3 -> Layer2 -> Layer4 persist)
+        # Layer1〜4を実データで通しで実行する本番ステップ（scripts/run_daily_pipeline.py参照）。
+        # 1銘柄・1データソースの障害はwarning_errors/excluded_summaryに記録して継続する設計だが、
+        # Google Drive永続化（Layer4）自体が失敗した場合はジョブを失敗させ、異常に気づけるようにする。
+        env:
+          GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          NEWSAPI_API_KEY: ${{ secrets.NEWSAPI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/run_daily_pipeline.py
