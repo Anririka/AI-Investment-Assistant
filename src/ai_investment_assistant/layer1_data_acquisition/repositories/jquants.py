@@ -109,6 +109,67 @@ class JQuantsRepository(MarketDataRepository):
         )
         return PriceSeries(ticker=ticker, currency="JPY", bars=bars, meta=meta)
 
+    def get_index_daily_prices(
+        self, index_code: str, start_date: date, end_date: date
+    ) -> PriceSeries:
+        """指数（TOPIX等）の日次四本値を取得する（V2 API `/indices/bars/daily`）。
+
+        2026-07-23〜24のライブ実行で、市場レジーム判定に使っていたプレースホルダー
+        ティッカー「998407」（Yahoo!ファイナンス上の日経平均株価コード）が、
+        個別銘柄用の`/equities/bars/daily`エンドポイントでは常に取得失敗することが
+        判明した。二次情報（Qiitaの解説記事等）で調査したところ、そもそも日経平均株価
+        （日経225）はJ-Quantsでは提供されていない可能性が高い（算出元の日本経済新聞社
+        からの別途ライセンスが必要なため）。J-Quants自身が公式に提供する指数はTOPIX
+        （東証株価指数、指数コード"0000"）であり、専用のエンドポイント
+        `/indices/bars/daily`（`code`パラメータで対象指数を指定）が用意されている。
+        そのため、市場レジーム判定の基準指数を日経平均株価からTOPIXへ切り替えた
+        （run_daily_pipeline.py参照）。
+
+        注意：個別銘柄用エンドポイントとは異なるレスポンス形状の可能性があるため、
+        フィールド名は`get_daily_prices`同様の短縮形（O/H/L/C）と、二次情報にあった
+        正式名（Open/High/Low/Close）の両方を試す。実際のライブレスポンスは
+        まだ確認できていないため、想定したフィールドが見つからない場合は診断のため
+        警告ログに実際の行データのキー一覧を残す。
+        """
+        payload = self._request(
+            "/indices/bars/daily",
+            params={"code": index_code, "from": start_date.isoformat(), "to": end_date.isoformat()},
+        )
+        rows = payload.get("data", [])
+
+        def _field(row: dict, *keys: str):
+            for key in keys:
+                if key in row:
+                    return row[key]
+            return None
+
+        bars = []
+        for row in rows:
+            open_ = _field(row, "O", "Open")
+            high = _field(row, "H", "High")
+            low = _field(row, "L", "Low")
+            close = _field(row, "C", "Close")
+            if None in (open_, high, low, close):
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "get_index_daily_prices(%s): expected O/H/L/C or Open/High/Low/Close "
+                    "fields not found; actual row keys=%s", index_code, list(row.keys()),
+                )
+                continue
+            bars.append(
+                PriceBar(
+                    date=datetime.strptime(row["Date"], "%Y-%m-%d").date(),
+                    open=float(open_),
+                    high=float(high),
+                    low=float(low),
+                    close=float(close),
+                    volume=0,  # 指数に出来高の概念はないため常に0
+                )
+            )
+        meta = DataFetchMeta(source_used="jquants", fetched_at=datetime.utcnow(), success=True)
+        return PriceSeries(ticker=index_code, currency="JPY", bars=tuple(bars), meta=meta)
+
     def get_fundamentals(self, ticker: str) -> FundamentalSnapshot:
         """財務情報を取得する（V2 API `/fins/summary`）。
 

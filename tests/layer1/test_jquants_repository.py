@@ -124,6 +124,66 @@ def test_get_daily_prices_parses_real_jquants_v2_response(mock_get):
     assert called_headers == {"x-api-key": "k"}
 
 
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_index_daily_prices_calls_indices_endpoint_and_parses_short_field_names(mock_get):
+    """2026-07-24追加：市場レジーム判定の基準指数を日経平均株価（J-Quantsでは未提供）から
+    TOPIX（指数コード"0000"）へ切り替えた際に新設したメソッドの回帰テスト。
+    `/indices/bars/daily`を正しく叩き、get_daily_pricesと同じ短縮フィールド名
+    （O/H/L/C）を優先的にマッピングすること。出来高の概念が無いためvolumeは常に0。
+    """
+    mock_get.return_value = FakeResponse(
+        200,
+        {
+            "data": [
+                {"Date": "2026-07-16", "Code": "0000", "O": 2800.0, "H": 2820.0, "L": 2790.0, "C": 2810.0},
+                {"Date": "2026-07-17", "Code": "0000", "O": 2810.0, "H": 2830.0, "L": 2805.0, "C": 2825.0},
+            ]
+        },
+    )
+    repo = JQuantsRepository(api_key="k")
+
+    series = repo.get_index_daily_prices("0000", date(2026, 7, 16), date(2026, 7, 17))
+
+    called_path = mock_get.call_args.args[0]
+    assert called_path == "https://api.jquants.com/v2/indices/bars/daily"
+    called_params = mock_get.call_args.kwargs["params"]
+    assert called_params["code"] == "0000"
+    assert len(series.bars) == 2
+    assert series.bars[0].close == 2810.0
+    assert series.bars[1].close == 2825.0
+    assert series.bars[0].volume == 0
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_index_daily_prices_falls_back_to_long_field_names(mock_get):
+    """短縮形（O/H/L/C）が無い場合、正式名（Open/High/Low/Close）でも取れること。"""
+    mock_get.return_value = FakeResponse(
+        200,
+        {"data": [{"Date": "2026-07-16", "Open": 2800.0, "High": 2820.0, "Low": 2790.0, "Close": 2810.0}]},
+    )
+    repo = JQuantsRepository(api_key="k")
+
+    series = repo.get_index_daily_prices("0000", date(2026, 7, 16), date(2026, 7, 16))
+
+    assert len(series.bars) == 1
+    assert series.bars[0].close == 2810.0
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_index_daily_prices_missing_fields_skips_row_and_logs(mock_get, caplog):
+    """想定したいずれのフィールド名も見つからない行は、クラッシュせずスキップし、
+    診断のため実際の行データのキー一覧を警告ログに残す。
+    """
+    mock_get.return_value = FakeResponse(200, {"data": [{"Date": "2026-07-16", "unexpected": 1}]})
+    repo = JQuantsRepository(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        series = repo.get_index_daily_prices("0000", date(2026, 7, 16), date(2026, 7, 16))
+
+    assert series.bars == ()
+    assert any("unexpected" in record.message for record in caplog.records)
+
+
 @pytest.mark.parametrize(
     "status_code,expected_exception",
     [
