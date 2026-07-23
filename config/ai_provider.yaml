@@ -8,7 +8,11 @@
 
 news_structurer:
   provider: gemini                 # claude / gpt / gemini / local（コスト最適化のためgeminiに変更）
-  model: gemini-2.5-flash-lite     # 無料枠対象の低コストモデル
+  # 2026-07-23：gemini-2.5-flash-liteは新規ユーザー・新規プロジェクトでは
+  # 既に404 NOT_FOUNDで使用不可（ライブ実行で確認済み。廃止予定日は2026-10-16だが、
+  # 新規発行のAPIキーには前倒しで制限がかかる模様）。Google公式の後継モデルである
+  # gemini-3.1-flash-liteに切り替えた（無料枠対象の低コストモデル）。
+  model: gemini-3.1-flash-lite
   batch_size: 5
   # provider: claude を使う場合は、下記モデル指定に切り替える
   # model: claude-haiku-4-5

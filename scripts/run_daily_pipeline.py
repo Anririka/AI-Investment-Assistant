@@ -146,6 +146,28 @@ def _fetch_market_candidates(
         )
         ticker_infos = {}
 
+    # 診断ログ（2026-07-23追加）：2026-07-23のライブ実行で、japan_equity側の全銘柄が
+    # market_cap=None扱いでMARKET_CAP_TOO_SMALL除外された。get_listed_universe()は
+    # まだライブ検証できていない（jquants.pyのdocstring参照）ため、config/universe.yamlの
+    # 4桁ticker（例："7203"）と、get_listed_universeが実際に返すticker形式（5桁の
+    # 銘柄コード等の可能性がある、get_daily_pricesのレスポンスでは"Code":"72030"だった
+    # 前例あり）が一致していない可能性がある。次回ライブ実行のログでticker_infosの
+    # 実際のキー形式を確認し、必要なら正規化ロジックを追加する。
+    if tickers and not ticker_infos:
+        logger.warning(
+            "get_listed_universe returned no entries for %s (tickers=%s)", asset_class, tickers
+        )
+    elif tickers:
+        unmatched = [t for t in tickers if t not in ticker_infos]
+        if unmatched:
+            sample_keys = list(ticker_infos.keys())[:10]
+            logger.warning(
+                "get_listed_universe: %d/%d tickers unmatched for %s (unmatched=%s, "
+                "ticker_infos keys sample=%s) -- config/universe.yamlのticker形式と "
+                "get_listed_universeの返すticker形式が不一致の可能性あり",
+                len(unmatched), len(tickers), asset_class, unmatched, sample_keys,
+            )
+
     for ticker in tickers:
         try:
             price_series = chain.call("get_daily_prices", ticker, start, end)
