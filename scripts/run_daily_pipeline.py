@@ -132,7 +132,7 @@ def _empty_price_series(ticker: str, reason: str) -> PriceSeries:
     return PriceSeries(ticker=ticker, currency="JPY", bars=(bar,), meta=meta)
 
 
-def _estimate_market_cap(fundamentals, price_series: PriceSeries) -> "float | None":
+def _estimate_market_cap(fundamentals, price_series: PriceSeries, ticker: str = "") -> "float | None":
     """時価総額を、既に取得済みのファンダメンタル・株価から近似する（2026-07-23追加）。
 
     J-Quants（無料〜Lightプラン）・Alpha Vantage/Twelve DataのいずれもTickerInfo経由では
@@ -144,10 +144,23 @@ def _estimate_market_cap(fundamentals, price_series: PriceSeries) -> "float | No
 
     純利益・EPSのいずれかが欠損、EPS=0、または株価データが空の場合はNoneを返す
     （screener.py側でmin_market_cap未満として扱われ除外される、これは既存の仕様どおり）。
+
+    診断ログ（2026-07-23追加）：2026-07-23のライブ実行で、この近似計算を追加した後も
+    全銘柄がMARKET_CAP_TOO_SMALLで除外され続けたため、具体的にどのフィールドが
+    欠損していたのかを切り分けるために追加した（fundamentals自体が未確認のレスポンス
+    形状に依存しているため、net_income/epsが実際には取得できていない可能性がある）。
     """
-    if fundamentals is None or fundamentals.net_income is None or not fundamentals.eps:
+    if fundamentals is None:
+        logger.warning("_estimate_market_cap(%s): fundamentals is None", ticker)
+        return None
+    if fundamentals.net_income is None or not fundamentals.eps:
+        logger.warning(
+            "_estimate_market_cap(%s): missing net_income or eps (net_income=%s, eps=%s)",
+            ticker, fundamentals.net_income, fundamentals.eps,
+        )
         return None
     if not price_series.bars:
+        logger.warning("_estimate_market_cap(%s): price_series has no bars", ticker)
         return None
     shares_outstanding = fundamentals.net_income / fundamentals.eps
     latest_close = price_series.bars[-1].close
@@ -214,7 +227,7 @@ def _fetch_market_candidates(
             info = ticker_infos.get(ticker)
             market_cap = info.market_cap if info else None
             if market_cap is None:
-                market_cap = _estimate_market_cap(fundamentals, price_series)
+                market_cap = _estimate_market_cap(fundamentals, price_series, ticker=ticker)
             candidates.append(
                 {
                     "ticker": ticker,

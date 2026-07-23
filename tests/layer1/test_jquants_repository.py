@@ -148,12 +148,13 @@ def test_error_status_codes_map_to_expected_exceptions(mock_get, status_code, ex
 def test_get_fundamentals_calls_fins_summary_endpoint_and_parses_fields(mock_get):
     """2026-07-22のライブ実行で判明した誤りの回帰テスト：`/fins/summary`を正しく叩き、
     実際のフィールド名（DiscDate/CurPerType/Sales/OP/NP/EPS/TA/Eq/CFO/DivAnn）を
-    FundamentalSnapshotへ正しくマッピングすること。
+    FundamentalSnapshotへ正しくマッピングすること。トップレベルキーは`data`を優先する
+    （2026-07-23追加：get_listed_universeと同じくJ-Quants V2共通の命名パターンのため）。
     """
     mock_get.return_value = FakeResponse(
         200,
         {
-            "fins_summary": [
+            "data": [
                 {
                     "DiscDate": "2026-05-10", "CurPerType": "FY", "Sales": 45_000_000_000_000.0,
                     "OP": 5_000_000_000_000.0, "NP": 4_500_000_000_000.0, "EPS": 350.5,
@@ -184,14 +185,42 @@ def test_get_fundamentals_calls_fins_summary_endpoint_and_parses_fields(mock_get
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_fundamentals_still_supports_legacy_fins_summary_key(mock_get):
+    """`data`キーが無い場合、後方互換として`fins_summary`キーも引き続き読めること。"""
+    mock_get.return_value = FakeResponse(
+        200, {"fins_summary": [{"CurPerType": "FY", "EPS": 100.0}]}
+    )
+    repo = JQuantsRepository(api_key="k")
+
+    fundamentals = repo.get_fundamentals("7203")
+
+    assert fundamentals.eps == 100.0
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
 def test_get_fundamentals_handles_empty_response(mock_get):
-    mock_get.return_value = FakeResponse(200, {"fins_summary": []})
+    mock_get.return_value = FakeResponse(200, {"data": []})
     repo = JQuantsRepository(api_key="k")
 
     fundamentals = repo.get_fundamentals("7203")
 
     assert fundamentals.ticker == "7203"
     assert fundamentals.eps is None
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_fundamentals_missing_known_keys_logs_diagnostic(mock_get, caplog):
+    """想定したいずれのキー（data/fins_summary/summary）も見つからない場合、診断のため
+    実際のトップレベルキー一覧を警告ログに残す（2026-07-23追加）。
+    """
+    mock_get.return_value = FakeResponse(200, {"unexpected_key": []})
+    repo = JQuantsRepository(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        fundamentals = repo.get_fundamentals("7203")
+
+    assert fundamentals.eps is None
+    assert any("unexpected_key" in record.message for record in caplog.records)
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")

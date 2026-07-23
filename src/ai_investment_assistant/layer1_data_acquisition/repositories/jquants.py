@@ -119,6 +119,16 @@ class JQuantsRepository(MarketDataRepository):
         レスポンス構造 `DiscDate`／`CurPerType`／`Sales`／`OP`／`NP`／`EPS`／`TA`／`Eq`／
         `CFO`／`DivAnn`に合わせて修正）。
 
+        注意（2026-07-23追加）：トップレベルのキー名も`fins_summary`/`summary`という
+        想定は未検証のまま（当時は疎通確認できず二次情報のみで判断）だった。同日、
+        `get_listed_universe`で同様に想定していたトップレベルキー（`equities`）が誤りで
+        実際は`data`だったことが判明した（`/equities/bars/daily`と同じ命名パターン）ため、
+        本メソッドも`data`をJ-Quants V2共通のトップレベルキーとして優先的に試すよう修正した
+        （`fins_summary`/`summary`は後方互換のフォールバックとして残す）。想定した
+        キーがいずれも見つからない、または該当銘柄の開示データが0件の場合は、診断のため
+        警告ログに実際のレスポンス形状を残す（時価総額の近似計算がnet_income/epsの欠損で
+        常に失敗する問題の切り分けのため、2026-07-23のライブ実行で必要になった）。
+
         注意（未確認の項目）：`capital_expenditure`（設備投資額）・
         `interest_bearing_debt`（有利子負債）に対応するフィールド名は、公式ドキュメント
         （無料プランで参照可能な範囲）から確認できなかった。誤ったフィールド名を
@@ -129,7 +139,15 @@ class JQuantsRepository(MarketDataRepository):
         契約プラン（light）の範囲外のため未対応とする。
         """
         payload = self._request("/fins/summary", params={"code": ticker})
-        rows = payload.get("fins_summary", payload.get("summary", []))
+        rows = payload.get("data", payload.get("fins_summary", payload.get("summary")))
+        if not rows:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "get_fundamentals(%s): no rows found under 'data'/'fins_summary'/'summary'; "
+                "actual top-level keys=%s", ticker, list(payload.keys()),
+            )
+            rows = []
         row = rows[0] if rows else {}
         meta = DataFetchMeta(source_used="jquants", fetched_at=datetime.utcnow())
         return FundamentalSnapshot(
