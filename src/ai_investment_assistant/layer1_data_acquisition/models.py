@@ -50,6 +50,15 @@ class FundamentalSnapshot:
     """PER/PBR/ROE等の計算に必要な、加工前の原データ（4章・3-2）。
 
     比率計算はLayer2の責務のため、ここでは生数値のみを保持する。
+
+    `market_cap`（2026-07-23追加）：時価総額そのものを情報源が直接提供する場合にのみ
+    設定する（例：Alpha Vantage OVERVIEWの`MarketCapitalization`、Twelve Data
+    `/statistics`の`market_capitalization`）。既存フィールドのみで運用してきた
+    呼び出し元との後方互換のため、デフォルト値`None`を持つ末尾フィールドとして追加した
+    （米国株のmarket_capが常時取得不能だった問題への対応、run_daily_pipeline.py
+    冒頭docstringのギャップ5参照）。情報源が直接提供しない場合（J-Quants等）は
+    Noneのままとし、呼び出し元（run_daily_pipeline.py）側でnet_income/epsからの
+    近似計算にフォールバックする。
     """
 
     ticker: str
@@ -65,6 +74,7 @@ class FundamentalSnapshot:
     total_assets: Optional[float]
     dividend: Optional[float]
     meta: DataFetchMeta
+    market_cap: Optional[float] = None
 
 
 @dataclass(frozen=True)

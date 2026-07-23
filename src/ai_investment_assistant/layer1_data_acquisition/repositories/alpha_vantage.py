@@ -118,6 +118,12 @@ class AlphaVantageRepository(MarketDataRepository):
             total_assets=None,
             dividend=_to_float(payload.get("DividendPerShare")),
             meta=meta,
+            # 2026-07-23追加：net_incomeを提供しないため、min_market_cap screeningの
+            # ためのnet_income/EPSベースの近似計算（run_daily_pipeline.py側）が
+            # 米国株では常に失敗していた。OVERVIEWが時価総額を直接提供する
+            # `MarketCapitalization`フィールドを使う（未ライブ検証、本ファイル冒頭の
+            # 注意書きどおり二次情報ベース）。
+            market_cap=_to_float(payload.get("MarketCapitalization")),
         )
 
     def get_listed_universe(self) -> list[TickerInfo]:

@@ -107,23 +107,38 @@ class TwelveDataRepository(MarketDataRepository):
                     return d[key]
             return None
 
+        def _to_float(value: Optional[Any]) -> Optional[float]:
+            # 2026-07-23追加：J-Quants側で数値項目が文字列で返り、そのまま演算に
+            # 使ってTypeErrorになった実例があった（jquants.py参照）ため、こちらも
+            # 同様に明示的なfloat変換で防御する（未ライブ検証のためTwelve Dataでも
+            # 同じ形になる可能性を考慮）。
+            if value in (None, "", "None", "-"):
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
         meta = DataFetchMeta(source_used="twelve_data", fetched_at=datetime.utcnow())
         return FundamentalSnapshot(
             ticker=ticker,
             fiscal_period=_get(financials, "fiscal_period") or "",
             # Twelve Dataの/statisticsはベンダー固有の深いネスト構造のため、EPSは
             # valuations_metrics側の値で代用する（要ライブ検証、コメント参照）。
-            eps=_get(valuations, "eps", "trailing_eps"),
-            net_assets=_get(valuations, "book_value_per_share"),
-            net_income=_get(financials, "net_income"),
-            revenue=_get(financials, "revenue_ttm", "revenue"),
-            operating_income=_get(financials, "operating_income"),
-            operating_cash_flow=_get(financials, "operating_cash_flow"),
-            capital_expenditure=_get(financials, "capital_expenditures"),
-            interest_bearing_debt=_get(financials, "total_debt"),
-            total_assets=_get(financials, "total_assets"),
-            dividend=_get(valuations, "dividend_per_share"),
+            eps=_to_float(_get(valuations, "eps", "trailing_eps")),
+            net_assets=_to_float(_get(valuations, "book_value_per_share")),
+            net_income=_to_float(_get(financials, "net_income")),
+            revenue=_to_float(_get(financials, "revenue_ttm", "revenue")),
+            operating_income=_to_float(_get(financials, "operating_income")),
+            operating_cash_flow=_to_float(_get(financials, "operating_cash_flow")),
+            capital_expenditure=_to_float(_get(financials, "capital_expenditures")),
+            interest_bearing_debt=_to_float(_get(financials, "total_debt")),
+            total_assets=_to_float(_get(financials, "total_assets")),
+            dividend=_to_float(_get(valuations, "dividend_per_share")),
             meta=meta,
+            # 2026-07-23追加：米国株のmarket_capが常時取得不能だった問題への対応
+            # （Alpha Vantageと同じ理由、models.py FundamentalSnapshotのdocstring参照）。
+            market_cap=_to_float(_get(valuations, "market_capitalization", "market_cap")),
         )
 
     def get_listed_universe(self) -> list[TickerInfo]:

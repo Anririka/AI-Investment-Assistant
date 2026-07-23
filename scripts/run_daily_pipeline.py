@@ -47,19 +47,25 @@ data_quality_policy.yamlのwarning_errors語彙）。個別ティッカーの取
   4. 【config/risk_rules.yamlが未整備】layer2_analysis_design.md §3-5がregime→戦略バイアス
      （strategy_bias）の参照先として挙げるconfig/risk_rules.yamlが本リポジトリに存在しない。
      本スクリプトは暫定的に全資産クラス"neutral"を返す。
-  5. 【market_capが日本株・米国株とも常時取得不能だった問題（2026-07-23対応）】
+  5. 【market_capが日本株・米国株とも常時取得不能だった問題（2026-07-23対応、解消）】
      J-Quants（無料〜Lightプラン）の`/equities/master`、Alpha Vantage/Twelve Dataの
      `get_listed_universe()`はいずれも時価総額を直接は返さない（2026-07-23のライブ実行で
-     確認、全候補がMARKET_CAP_TOO_SMALLで除外されていた）。Layer1の各Repositoryは
-     Design-Frozenのため、TickerInfo/FundamentalSnapshotのフィールド自体は追加せず、
-     本スクリプト側（`_estimate_market_cap`）で、既に取得済みのファンダメンタル
-     （純利益・EPS）と直近終値から時価総額を近似する暫定策で対応した：
-         発行済株式数 ≈ 純利益 ÷ EPS
-         時価総額 ≈ 発行済株式数 × 直近終値
-     info.market_cap（Repositoryが直接返す値）が取得できた場合はそちらを優先する。
-     あくまで直近決算時点のEPSを使った近似値であり、発行済株式数の変動（自己株買い等）
-     や、EPSが古い期のものである場合には実際の時価総額とズレが生じ得る。より正確な値が
-     必要になった場合は、真の時価総額を提供するデータソースへの切り替えを検討すること。
+     確認、全候補がMARKET_CAP_TOO_SMALLで除外されていた）。日本株はまず本スクリプト側
+     （`_estimate_market_cap`）の近似計算（純利益÷EPS×直近終値）で対応し、ライブ実行で
+     実際に候補が出ることを確認した。米国株はこの近似が使えなかった（Alpha Vantage
+     OVERVIEWがnet_incomeを提供しないため）ことが判明したため、ユーザーの承認を得て
+     FundamentalSnapshotに`market_cap`フィールドを追加した（models.py、デフォルト値
+     Noneの末尾フィールドとして後方互換を保っている）。Alpha Vantage
+     （`MarketCapitalization`）・Twelve Data（`market_capitalization`）はいずれも
+     この新フィールドへ直接値を設定する。
+
+     時価総額の優先順位は`_fetch_market_candidates`内で以下のとおり（`_estimate_market_cap`
+     のdocstringも参照）：
+         1. info.market_cap（get_listed_universeが直接返す値、現状どの情報源も未提供）
+         2. fundamentals.market_cap（情報源が直接提供する値、Alpha Vantage/Twelve Data）
+         3. _estimate_market_cap（純利益÷EPS×直近終値の近似値、J-Quants向けの最終手段）
+     3番目のみ近似値であり、発行済株式数の変動（自己株買い等）や、EPSが古い期のもので
+     ある場合には実際の時価総額とズレが生じ得る点は変わらず注意が必要。
 """
 
 from __future__ import annotations
@@ -235,7 +241,15 @@ def _fetch_market_candidates(
             fundamentals = chain.call("get_fundamentals", ticker)
 
             info = ticker_infos.get(ticker)
+            # 時価総額の優先順位（2026-07-23追加、A案）：
+            #   1. info.market_cap（get_listed_universeが直接返す値、現状どの情報源も未提供）
+            #   2. fundamentals.market_cap（Alpha Vantage OVERVIEWの`MarketCapitalization`・
+            #      Twelve Data `/statistics`の`market_capitalization`等、情報源が直接提供する値）
+            #   3. _estimate_market_cap（純利益÷EPS×直近終値の近似値、J-Quantsのように
+            #      直接値もfundamentals.market_capも無い場合の最終フォールバック）
             market_cap = info.market_cap if info else None
+            if market_cap is None:
+                market_cap = fundamentals.market_cap if fundamentals else None
             if market_cap is None:
                 market_cap = _estimate_market_cap(fundamentals, price_series, ticker=ticker)
             candidates.append(

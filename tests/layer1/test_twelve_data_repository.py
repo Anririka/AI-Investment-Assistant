@@ -77,6 +77,58 @@ def test_get_listed_universe_parses_data(mock_get):
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.twelve_data.requests.get")
+def test_get_fundamentals_parses_statistics_and_coerces_strings_to_float(mock_get):
+    """2026-07-23追加：J-Quantsで数値項目が文字列で返り、そのまま演算してTypeErrorに
+    なった実例（jquants.py参照）と同じ問題を防ぐため、Twelve Data側も文字列で来ても
+    floatへ変換されることを確認する。あわせて、米国株のmarket_cap常時取得不能問題への
+    対応として追加した`market_capitalization`のマッピングも検証する。
+    """
+    mock_get.return_value = FakeResponse(
+        200,
+        {
+            "statistics": {
+                "financials": {
+                    "fiscal_period": "2026Q2",
+                    "net_income": "9.4e10",
+                    "revenue_ttm": "3.8e11",
+                    "operating_income": "1.2e11",
+                    "operating_cash_flow": "1.1e11",
+                    "capital_expenditures": "1.0e10",
+                    "total_debt": "9.0e10",
+                    "total_assets": "3.5e11",
+                },
+                "valuations_metrics": {
+                    "eps": "6.5",
+                    "book_value_per_share": "4.2",
+                    "dividend_per_share": "1.0",
+                    "market_capitalization": "3000000000000",
+                },
+            }
+        },
+    )
+    repo = TwelveDataRepository(api_key="k")
+
+    snapshot = repo.get_fundamentals("AAPL")
+
+    assert snapshot.eps == 6.5
+    assert isinstance(snapshot.eps, float)
+    assert snapshot.net_income == 9.4e10
+    assert isinstance(snapshot.net_income, float)
+    assert snapshot.market_cap == 3_000_000_000_000.0
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.twelve_data.requests.get")
+def test_get_fundamentals_missing_statistics_returns_all_none(mock_get):
+    mock_get.return_value = FakeResponse(200, {})
+    repo = TwelveDataRepository(api_key="k")
+
+    snapshot = repo.get_fundamentals("AAPL")
+
+    assert snapshot.eps is None
+    assert snapshot.market_cap is None
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.twelve_data.requests.get")
 def test_get_earnings_calendar_parses_events(mock_get):
     mock_get.return_value = FakeResponse(
         200, {"symbol": "AAPL", "earnings": [{"date": "2026-08-05", "eps_actual": None}]}

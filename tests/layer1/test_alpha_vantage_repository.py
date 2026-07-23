@@ -80,6 +80,7 @@ def test_get_fundamentals_parses_overview(mock_get):
             "BookValue": "4.2",
             "RevenueTTM": "400000000000",
             "DividendPerShare": "1.0",
+            "MarketCapitalization": "3000000000000",
         },
     )
     repo = AlphaVantageRepository(api_key="k")
@@ -89,6 +90,20 @@ def test_get_fundamentals_parses_overview(mock_get):
     assert snapshot.eps == 6.5
     assert snapshot.revenue == 400000000000.0
     assert snapshot.net_income is None  # OVERVIEWからは取得しない設計
+    # 2026-07-23追加：net_incomeが常時取得不能なため、min_market_cap screeningの
+    # ための時価総額はOVERVIEWが直接提供するMarketCapitalizationから取得する
+    # （run_daily_pipeline.pyのnet_income/EPSベースの近似計算に頼らずに済む）。
+    assert snapshot.market_cap == 3_000_000_000_000.0
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.alpha_vantage.requests.get")
+def test_get_fundamentals_market_cap_missing_defaults_to_none(mock_get):
+    mock_get.return_value = FakeResponse(200, {"LatestQuarter": "2026-06-30"})
+    repo = AlphaVantageRepository(api_key="k")
+
+    snapshot = repo.get_fundamentals("AAPL")
+
+    assert snapshot.market_cap is None
 
 
 def test_get_trading_calendar_raises_not_implemented():
