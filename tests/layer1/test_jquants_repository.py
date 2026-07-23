@@ -196,15 +196,16 @@ def test_get_fundamentals_handles_empty_response(mock_get):
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
 def test_get_listed_universe_parses_real_field_names(mock_get):
-    """2026-07-23のライブ実行で判明した回帰テスト：当初想定していたフィールド名
-    （code/name/sector_code/market）では0件しか取得できなかった。二次情報を基に
-    修正した実際のフィールド名（Code/CoName/S33/Mkt）を正しくマッピングすること。
+    """2026-07-23のライブ実行で判明した回帰テスト（2回に分けて発覚）：
+    1回目：行ごとのフィールド名がcode/name/sector_code/marketでは0件しか取得できなかった
+    →Code/CoName/S33/Mktに修正。
+    2回目：トップレベルのキーが'equities'ではなく'data'だった（診断ログで確認）→修正。
     market_capに対応するフィールドは確認できていないためNoneのまま。
     """
     mock_get.return_value = FakeResponse(
         200,
         {
-            "equities": [
+            "data": [
                 {"Code": "72030", "CoName": "トヨタ自動車", "S33": "3700", "Mkt": "プライム"}
             ]
         },
@@ -222,8 +223,8 @@ def test_get_listed_universe_parses_real_field_names(mock_get):
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
-def test_get_listed_universe_missing_equities_key_returns_empty_and_logs(mock_get, caplog):
-    """想定した'equities'キーがレスポンスに無い場合、例外にはせず空リストを返し、
+def test_get_listed_universe_missing_data_key_returns_empty_and_logs(mock_get, caplog):
+    """想定した'data'キーがレスポンスに無い場合、例外にはせず空リストを返し、
     診断のため実際のトップレベルキー一覧を警告ログに残す（2026-07-23追加）。
     """
     mock_get.return_value = FakeResponse(200, {"unexpected_key": []})

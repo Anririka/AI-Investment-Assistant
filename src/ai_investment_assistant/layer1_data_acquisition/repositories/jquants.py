@@ -151,30 +151,30 @@ class JQuantsRepository(MarketDataRepository):
     def get_listed_universe(self) -> list[TickerInfo]:
         """上場銘柄一覧を取得する（V2 API `/equities/master`）。
 
-        2026-07-23のGitHub Actionsライブ実行で、当初想定していたフィールド名
+        2026-07-23のGitHub Actionsライブ実行（1回目）で、当初想定していたフィールド名
         （`equities`/`code`/`name`/`sector_code`/`market`/`market_cap`）では
-        0件しか取得できないことが判明した（config/universe.yamlのtickerと
-        一致するエントリが1件もヒットしない）。二次情報（note.com等のJ-Quants V2
-        解説記事）を基に、実際のフィールド名は`Code`・`CoName`（会社名）・
-        `S33`/`S33Nm`（33業種区分コード・名称）・`Mkt`/`MktNm`（市場区分）である
-        可能性が高いと判断し、修正した。
+        0件しか取得できないことが判明した。二次情報（note.com等のJ-Quants V2解説記事）を
+        基に、行ごとのフィールド名は`Code`・`CoName`（会社名）・`S33`/`S33Nm`（33業種区分
+        コード・名称）・`Mkt`/`MktNm`（市場区分）に修正した。
 
-        注意：`market_cap`に対応するフィールドは、公式ドキュメント・二次情報の
-        いずれからも確認できなかった（J-Quants自体が時価総額を直接は提供して
-        いない可能性が高い）。誤ったフィールド名を推測で埋めるより、Noneのままに
-        している（screener.py側でmarket_cap=Noneはmin_market_cap未満として扱われ、
-        除外される。この扱いを変えるかどうかは別途ユーザーと相談が必要な設計判断）。
+        トップレベルのキー名も同時に修正が必要だった：同日2回目のライブ実行で、診断ログ
+        （追加済み）が実際のキーは`equities`ではなく`data`であることを明らかにした
+        （`/equities/bars/daily`と同じ命名パターン）。これで`equities`キー不在の問題は解消。
 
-        また、トップレベルのキー名（`equities`）自体も未確認のため、想定した
-        キーが見つからない場合は診断用にpayloadの実際のキー一覧をログに残す。
+        注意（未解決）：`market_cap`に対応するフィールドは、公式ドキュメント・二次情報の
+        いずれからも確認できなかった（J-Quants自体が時価総額を直接は提供していない
+        可能性が高い）。誤ったフィールド名を推測で埋めるより、Noneのままにしている
+        （screener.py側でmarket_cap=Noneはmin_market_cap未満として扱われ除外される。
+        この扱いを変えるかどうかは別途ユーザーと相談が必要な設計判断であり、本メソッドの
+        修正だけでは「候補0件」問題は解消しない）。
         """
         payload = self._request("/equities/master")
-        rows = payload.get("equities")
+        rows = payload.get("data")
         if rows is None:
             import logging
 
             logging.getLogger(__name__).warning(
-                "get_listed_universe: expected key 'equities' not found in response; "
+                "get_listed_universe: expected key 'data' not found in response; "
                 "actual top-level keys=%s", list(payload.keys()),
             )
             rows = []
