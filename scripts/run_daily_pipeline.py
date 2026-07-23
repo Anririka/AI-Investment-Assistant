@@ -162,8 +162,18 @@ def _estimate_market_cap(fundamentals, price_series: PriceSeries, ticker: str = 
     if not price_series.bars:
         logger.warning("_estimate_market_cap(%s): price_series has no bars", ticker)
         return None
-    shares_outstanding = fundamentals.net_income / fundamentals.eps
-    latest_close = price_series.bars[-1].close
+    try:
+        shares_outstanding = fundamentals.net_income / fundamentals.eps
+        latest_close = price_series.bars[-1].close
+    except (TypeError, ValueError) as exc:
+        # 2026-07-23追加（回帰対応）：J-QuantsがNP/EPSを文字列で返す場合があり、
+        # 未修正のRepository実装がまだ残っていた場合でもこの関数単体では絶対に
+        # クラッシュしない（1銘柄の型不正で市場全体の候補取得が落ちた実例があったため、
+        # 呼び出し元の設計方針＝1銘柄の失敗で処理全体を止めない、に合わせて防御する）。
+        logger.warning(
+            "_estimate_market_cap(%s): unexpected type in net_income/eps/close (%s)", ticker, exc
+        )
+        return None
     return shares_outstanding * latest_close
 
 

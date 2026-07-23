@@ -137,6 +137,13 @@ class JQuantsRepository(MarketDataRepository):
         該当サブ指標は同一軸内の他指標へ自動的に比例配分される）。有料プランの
         `/fins/details`エンドポイントであれば取得できる可能性があるが、本リポジトリの
         契約プラン（light）の範囲外のため未対応とする。
+
+        注意（2026-07-23追加、回帰）：2026-07-23のライブ実行で、`NP`・`EPS`等の数値項目が
+        JSON上は数値ではなく文字列（例："4500000000000"）で返ってくることが判明した
+        （`fundamentals.net_income / fundamentals.eps`が`TypeError: unsupported operand
+        type(s) for /: 'str' and 'str'`で失敗し、japan_equity側の候補取得全体が
+        クラッシュした）。Alpha VantageRepository（`_to_float`）と同様のパターンで、
+        数値フィールドは明示的にfloat変換する。
         """
         payload = self._request("/fins/summary", params={"code": ticker})
         rows = payload.get("data", payload.get("fins_summary", payload.get("summary")))
@@ -149,20 +156,29 @@ class JQuantsRepository(MarketDataRepository):
             )
             rows = []
         row = rows[0] if rows else {}
+
+        def _to_float(value):
+            if value in (None, "", "None", "-"):
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
         meta = DataFetchMeta(source_used="jquants", fetched_at=datetime.utcnow())
         return FundamentalSnapshot(
             ticker=ticker,
             fiscal_period=row.get("CurPerType", ""),
-            eps=row.get("EPS"),
-            net_assets=row.get("Eq"),
-            net_income=row.get("NP"),
-            revenue=row.get("Sales"),
-            operating_income=row.get("OP"),
-            operating_cash_flow=row.get("CFO"),
+            eps=_to_float(row.get("EPS")),
+            net_assets=_to_float(row.get("Eq")),
+            net_income=_to_float(row.get("NP")),
+            revenue=_to_float(row.get("Sales")),
+            operating_income=_to_float(row.get("OP")),
+            operating_cash_flow=_to_float(row.get("CFO")),
             capital_expenditure=None,
             interest_bearing_debt=None,
-            total_assets=row.get("TA"),
-            dividend=row.get("DivAnn"),
+            total_assets=_to_float(row.get("TA")),
+            dividend=_to_float(row.get("DivAnn")),
             meta=meta,
         )
 

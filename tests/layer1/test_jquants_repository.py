@@ -185,6 +185,36 @@ def test_get_fundamentals_calls_fins_summary_endpoint_and_parses_fields(mock_get
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_fundamentals_coerces_string_numeric_fields_to_float(mock_get):
+    """2026-07-23のライブ実行で判明した回帰テスト：J-QuantsがNP/EPS等の数値項目を
+    JSON文字列（例："4500000000000"）で返す場合があり、これがそのままFundamentalSnapshotに
+    渡ると、呼び出し側（_estimate_market_cap等）でのfloat演算が
+    `TypeError: unsupported operand type(s) for /: 'str' and 'str'`で落ちる原因になっていた。
+    文字列で来てもfloatへ変換されることを確認する。
+    """
+    mock_get.return_value = FakeResponse(
+        200,
+        {
+            "data": [
+                {
+                    "CurPerType": "FY", "Sales": "45000000000000", "OP": "5000000000000",
+                    "NP": "4500000000000", "EPS": "350.5", "TA": "70000000000000",
+                    "Eq": "30000000000000", "CFO": "6000000000000", "DivAnn": "90",
+                }
+            ]
+        },
+    )
+    repo = JQuantsRepository(api_key="k")
+
+    fundamentals = repo.get_fundamentals("7203")
+
+    assert fundamentals.net_income == 4_500_000_000_000.0
+    assert isinstance(fundamentals.net_income, float)
+    assert fundamentals.eps == 350.5
+    assert isinstance(fundamentals.eps, float)
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
 def test_get_fundamentals_still_supports_legacy_fins_summary_key(mock_get):
     """`data`キーが無い場合、後方互換として`fins_summary`キーも引き続き読めること。"""
     mock_get.return_value = FakeResponse(
