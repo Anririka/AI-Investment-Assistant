@@ -15,13 +15,23 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
 _CONFIG_PATH = Path(__file__).resolve().parents[4] / "config" / "data_quality_policy.yaml"
+
+# 2026-07-24追加（回帰対応）：Layer4（scripts/run_daily_pipeline.py）はmarket_snapshot_*.json
+# 等のファイル名をJST基準の日付（now_jst.strftime("%Y%m%d")）で生成している。本スクリプトが
+# 日付引数省略時にUTC基準の日付をデフォルトにしていたため、UTC 15:00〜23:59（JST既に翌日）
+# の時間帯にLayer5を実行すると、Layer4が書き込んだ「今日」のファイルではなく前日分の
+# ファイル名を探しに行ってしまい、実データが存在するのに見つからない不整合が生じていた
+# （2026-07-24のライブ実行で発覚：Layer4は"20260724"のファイルを書いたが、Layer5は
+# デフォルトで"20260723"を探し、古い（別の日の）ファイルを読んでしまっていた）。
+# Layer4と同じJST基準に統一する。
+_JST = timezone(timedelta(hours=9))
 
 
 def load_policy(config_path: Path = _CONFIG_PATH) -> dict:
@@ -170,7 +180,7 @@ def run_load_snapshot(
 
 
 def main() -> int:
-    date_str = sys.argv[1] if len(sys.argv) > 1 else datetime.now(timezone.utc).strftime("%Y%m%d")
+    date_str = sys.argv[1] if len(sys.argv) > 1 else datetime.now(_JST).strftime("%Y%m%d")
     run_started_at_env = os.environ.get("LAYER5_RUN_STARTED_AT")
     run_started_at = (
         datetime.fromisoformat(run_started_at_env.replace("Z", "+00:00"))

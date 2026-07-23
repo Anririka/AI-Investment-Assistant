@@ -1,13 +1,27 @@
 """load_snapshot.pyのテスト（layer5_ai_judgment_design.md §3-1・§5、§12テスト方針）。"""
 
+import json
+import sys
 from datetime import datetime, timedelta, timezone
 
+import ai_investment_assistant.layer5_ai_judgment.scripts.load_snapshot as load_snapshot_module
 from ai_investment_assistant.layer5_ai_judgment.scripts.load_snapshot import (
     check_pipeline_completion,
     classify_data_quality,
     evaluate_snapshot,
+    main,
     run_load_snapshot,
 )
+
+
+class _FixedDatetime(datetime):
+    """datetime.now()のみ固定値を返すフェイク（他のdatetime機能はそのまま使える）。"""
+
+    _fixed_utc = datetime(2026, 7, 23, 20, 0, 0, tzinfo=timezone.utc)  # JSTでは翌日05:00
+
+    @classmethod
+    def now(cls, tz=None):
+        return cls._fixed_utc.astimezone(tz) if tz else cls._fixed_utc
 
 POLICY = {
     "blocking_errors": ["SNAPSHOT_MISSING", "PRICE_DATA_INVALID", "LAYER_PIPELINE_NOT_COMPLETED"],
@@ -136,3 +150,38 @@ def test_run_load_snapshot_blocked_when_snapshot_missing_despite_flag():
     result = run_load_snapshot(client, date_str="20260718", now=NOW, run_started_at=STARTED, policy=POLICY)
     assert result["status"] == "blocked"
     assert result["reason_code"] == "SNAPSHOT_MISSING"
+
+
+def test_main_default_date_str_uses_jst_not_utc(monkeypatch, tmp_path, capsys):
+    """2026-07-24追加の回帰テスト：Layer4（scripts/run_daily_pipeline.py）はファイル名を
+    JST基準の日付で生成するが、本スクリプトは日付引数省略時にUTC基準の日付をデフォルトに
+    していたため、UTC 15:00〜23:59（JST側は既に翌日）の時間帯に実行すると、Layer4が
+    実際に書き込んだ「今日」のファイルではなく別の日のファイル名を探しに行ってしまう
+    不整合があった（2026-07-24のライブ実行で発覚）。UTC 20:00（=JST翌日05:00）を模擬し、
+    探しに行く先が UTC日付"20260723" ではなく JST日付"20260724" であることを確認する。
+    """
+    monkeypatch.setattr(sys, "argv", ["load_snapshot.py"])  # 日付引数を省略
+    monkeypatch.setattr(load_snapshot_module, "datetime", _FixedDatetime)
+    monkeypatch.setenv("LAYER5_LOCAL_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("LAYER5_RUN_STARTED_AT", raising=False)
+
+    # JST日付"20260724"のsnapshotだけを配置し、UTC日付"20260723"を探しに行っていたら
+    # 見つからずSNAPSHOT_MISSINGになってしまうことでバグを検出する。
+    snapshots_dir = tmp_path / "snapshots"
+    snapshots_dir.mkdir()
+    (snapshots_dir / "layer4_completed_20260724.json").write_text(
+        json.dumps({"completed": True}), encoding="utf-8"
+    )
+    (snapshots_dir / "market_snapshot_20260724.json").write_text(
+        json.dumps({"candidates": []}), encoding="utf-8"
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    result = json.loads(capsys.readouterr().out)
+    # JST日付"20260724"のファイルを正しく見つけられていれば"passed"になる。UTC日付
+    # "20260723"を（バグ再発時のように）探しに行った場合はflag自体が見つからず
+    # "waiting"（elapsed=0のため、まだblockedにはならない）になるため、両者を明確に
+    # 区別できる。
+    assert result["status"] == "passed"
