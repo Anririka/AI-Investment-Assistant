@@ -195,12 +195,17 @@ def test_get_fundamentals_handles_empty_response(mock_get):
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
-def test_get_listed_universe_parses_ticker_info(mock_get):
+def test_get_listed_universe_parses_real_field_names(mock_get):
+    """2026-07-23のライブ実行で判明した回帰テスト：当初想定していたフィールド名
+    （code/name/sector_code/market）では0件しか取得できなかった。二次情報を基に
+    修正した実際のフィールド名（Code/CoName/S33/Mkt）を正しくマッピングすること。
+    market_capに対応するフィールドは確認できていないためNoneのまま。
+    """
     mock_get.return_value = FakeResponse(
         200,
         {
             "equities": [
-                {"code": "7203", "name": "トヨタ自動車", "sector_code": "3700", "market": "プライム", "market_cap": 4.0e13}
+                {"Code": "72030", "CoName": "トヨタ自動車", "S33": "3700", "Mkt": "プライム"}
             ]
         },
     )
@@ -209,8 +214,26 @@ def test_get_listed_universe_parses_ticker_info(mock_get):
     universe = repo.get_listed_universe()
 
     assert len(universe) == 1
-    assert universe[0].ticker == "7203"
+    assert universe[0].ticker == "72030"
     assert universe[0].name == "トヨタ自動車"
+    assert universe[0].sector_code == "3700"
+    assert universe[0].market == "プライム"
+    assert universe[0].market_cap is None
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")
+def test_get_listed_universe_missing_equities_key_returns_empty_and_logs(mock_get, caplog):
+    """想定した'equities'キーがレスポンスに無い場合、例外にはせず空リストを返し、
+    診断のため実際のトップレベルキー一覧を警告ログに残す（2026-07-23追加）。
+    """
+    mock_get.return_value = FakeResponse(200, {"unexpected_key": []})
+    repo = JQuantsRepository(api_key="k")
+
+    with caplog.at_level("WARNING"):
+        universe = repo.get_listed_universe()
+
+    assert universe == []
+    assert any("unexpected_key" in record.message for record in caplog.records)
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.jquants.requests.get")

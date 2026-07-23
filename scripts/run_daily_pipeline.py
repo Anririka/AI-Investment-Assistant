@@ -138,21 +138,26 @@ def _fetch_market_candidates(
     candidates: list = []
 
     try:
-        ticker_infos = {info.ticker: info for info in chain.call("get_listed_universe")}
+        listed_universe = list(chain.call("get_listed_universe"))
     except DataSourceError as exc:
         logger.warning("get_listed_universe failed for %s: %s", asset_class, exc)
         warning_errors.append(
             {"code": "MINOR_SOURCE_TIMEOUT", "message": f"{asset_class} get_listed_universe failed: {exc}", "source_layer": "layer1"}
         )
-        ticker_infos = {}
+        listed_universe = []
 
-    # 診断ログ（2026-07-23追加）：2026-07-23のライブ実行で、japan_equity側の全銘柄が
-    # market_cap=None扱いでMARKET_CAP_TOO_SMALL除外された。get_listed_universe()は
-    # まだライブ検証できていない（jquants.pyのdocstring参照）ため、config/universe.yamlの
-    # 4桁ticker（例："7203"）と、get_listed_universeが実際に返すticker形式（5桁の
-    # 銘柄コード等の可能性がある、get_daily_pricesのレスポンスでは"Code":"72030"だった
-    # 前例あり）が一致していない可能性がある。次回ライブ実行のログでticker_infosの
-    # 実際のキー形式を確認し、必要なら正規化ロジックを追加する。
+    # ticker_infosは生のticker（例："72030"）と、末尾の1桁（チェックディジット的な
+    # 付加数字、J-Quantsの5桁コード表記でよく見られる慣習）を除いた4桁形式
+    # （例："7203"）の両方をキーとして登録する（2026-07-23追加）。config/universe.yaml
+    # 側は4桁ティッカーで管理しているため、get_listed_universeが5桁形式で返す場合でも
+    # 一致するようにするための防御的な正規化（get_daily_pricesのレスポンスで
+    # "Code":"72030"だった前例あり、他方の対応が確認できるまでの暫定措置）。
+    ticker_infos: dict = {}
+    for info in listed_universe:
+        ticker_infos[info.ticker] = info
+        if len(info.ticker) == 5 and info.ticker.isdigit() and info.ticker.endswith("0"):
+            ticker_infos.setdefault(info.ticker[:4], info)
+
     if tickers and not ticker_infos:
         logger.warning(
             "get_listed_universe returned no entries for %s (tickers=%s)", asset_class, tickers

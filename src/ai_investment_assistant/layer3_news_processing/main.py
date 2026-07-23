@@ -61,11 +61,25 @@ def process_articles(
             structured_items.append(cached)
             continue
 
-        structured_item = _structure_one(
-            article, item_id, structurer, universe_tickers, sector_master,
-            importance_rules_config, now,
-        )
-        schema.validate(structured_item)
+        try:
+            structured_item = _structure_one(
+                article, item_id, structurer, universe_tickers, sector_master,
+                importance_rules_config, now,
+            )
+            schema.validate(structured_item)
+        except Exception as exc:  # noqa: BLE001
+            # 2026-07-23追加：LLM構造化（Gemini無料枠のレート制限等）が1記事だけ
+            # 失敗しても、Layer1のSINGLE_STOCK_DATA_FAILUREと同様に当該記事のみ除外し、
+            # 残りの記事の処理を継続する（従来は例外がここで捕捉されず、run_daily_pipeline.py
+            # まで伝播して news pipeline 全体が失敗扱いになっていた。2026-07-23の
+            # ライブ実行でGemini無料枠のレート制限超過により発覚）。
+            excluded_log.append({
+                "headline": article.get("headline", ""),
+                "reason_code": "LLM_STRUCTURING_FAILED",
+                "error_detail": str(exc),
+            })
+            continue
+
         store_cached(cache_store, item_id, structured_item)
         structured_items.append(structured_item)
 

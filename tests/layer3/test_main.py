@@ -121,6 +121,60 @@ def test_second_run_uses_cache_and_recomputes_age_hours():
     assert second_age == first_age + 24  # age_hoursだけは再計算される
 
 
+class FlakyStructurer:
+    """1件目の記事でのみ例外を送出する（レート制限等を模したフェイク）。"""
+
+    def __init__(self, fail_on_headline: str):
+        self.fail_on_headline = fail_on_headline
+        self.call_count = 0
+
+    def structure(self, article, universe_tickers=None, sector_master=None):
+        self.call_count += 1
+        if article["headline"] == self.fail_on_headline:
+            raise RuntimeError("429 RESOURCE_EXHAUSTED (fake rate limit)")
+        return {
+            "category": "earnings",
+            "affected_companies": [],
+            "affected_sectors": [],
+            "impact_direction": "neutral",
+            "impact_horizon": "short_term",
+            "importance": 50,
+            "confidence": 0.5,
+            "confidence_reason": "テスト用",
+            "summary": "テスト記事の要約。",
+            "llm_provider": "gemini",
+            "llm_model": "gemini-3.1-flash-lite",
+            "structuring_status": "success",
+        }
+
+
+def test_single_article_llm_failure_does_not_abort_the_whole_run():
+    """2026-07-23追加：Gemini無料枠のレート制限超過等で1記事のLLM構造化が失敗しても、
+    残りの記事は正常に処理され、失敗した記事だけがexcluded（LLM_STRUCTURING_FAILED）に
+    回ることを確認する（従来は例外がprocess_articles外まで伝播し、run全体が失敗していた）。
+    """
+    structurer = FlakyStructurer(fail_on_headline="レート制限で失敗する記事")
+    cache_store = InMemoryCacheStore()
+    now = datetime(2026, 7, 20, tzinfo=timezone.utc)
+
+    articles = [
+        _article(headline="レート制限で失敗する記事", url="https://a.com/1"),
+        _article(headline="正常に処理される記事", url="https://b.com/2"),
+    ]
+
+    result = process_articles(
+        articles=articles, structurer=structurer, cache_store=cache_store,
+        universe_tickers=[], sector_master=[], quality_filter_config=QUALITY_CONFIG,
+        importance_rules_config=IMPORTANCE_CONFIG, now=now,
+    )
+
+    assert len(result["structured_items"]) == 1
+    assert result["structured_items"][0]["headline"] == "正常に処理される記事"
+    assert len(result["excluded"]) == 1
+    assert result["excluded"][0]["reason_code"] == "LLM_STRUCTURING_FAILED"
+    assert result["excluded"][0]["headline"] == "レート制限で失敗する記事"
+
+
 def test_duplicate_articles_are_merged_before_processing():
     structurer = FakeStructurer()
     cache_store = InMemoryCacheStore()
