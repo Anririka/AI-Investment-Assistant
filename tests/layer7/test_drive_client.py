@@ -78,19 +78,19 @@ class FakeLayer7DriveClient(Layer7DriveClient):
 
 
 def test_read_tracking_json_returns_none_when_missing():
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_tracking_json("active_positions.json") is None
 
 
 def test_write_tracking_json_creates_then_reads_back():
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_tracking_json("active_positions.json", {"positions": [{"tracking_id": "TRK-1"}]})
     content = client.read_tracking_json("active_positions.json")
     assert content == {"positions": [{"tracking_id": "TRK-1"}]}
 
 
 def test_write_tracking_json_updates_existing_file_in_place():
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_tracking_json("active_positions.json", {"positions": []})
     folder_id = client.folders["tracking"]
     file_count_before = len([k for k in client.files if k[0] == folder_id and k[1] == "active_positions.json"])
@@ -101,7 +101,7 @@ def test_write_tracking_json_updates_existing_file_in_place():
 
 
 def test_write_completion_flag_creates_new_file_each_time():
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_completion_flag("layer7_completed_20260718.json", {"completed": False, "n": 1})
     client.write_completion_flag("layer7_completed_20260718.json", {"completed": True, "n": 2})
     latest = client.read_latest_completion_flag("layer7_completed_20260718.json")
@@ -109,17 +109,17 @@ def test_write_completion_flag_creates_new_file_each_time():
 
 
 def test_read_latest_completion_flag_returns_none_when_missing():
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_latest_completion_flag("layer7_completed_20260718.json") is None
 
 
 def test_read_proposal_sheet_rows_returns_none_when_reports_folder_missing():
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_proposal_sheet_rows("20260718") is None
 
 
 def test_read_proposal_sheet_rows_parses_header_and_rows():
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.folders["reports"] = "reports-id"
     client.add_spreadsheet("reports-id", "提案ログ_20260718", {
         "本日の提案": [["run_id", "証券コード"], ["20260718-0630", "NVDA"]],
@@ -133,7 +133,7 @@ def test_read_proposal_sheet_rows_uses_the_latest_write_when_rerun_same_day():
     # 簡易実装ではdictキーが(folder_id, name)であるため物理的な重複までは表現できない。
     # ここでは「再実行で内容が更新されたら、読み取りは常に最新の内容を返す」という
     # createdTime最大判定の実質的な振る舞いのみを検証する。
-    client = FakeLayer7DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer7DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.folders["reports"] = "reports-id"
     client.add_spreadsheet("reports-id", "提案ログ_20260718", {"本日の提案": [["run_id"], ["old"]]}, created_order=1)
     client.add_spreadsheet("reports-id", "提案ログ_20260718", {"本日の提案": [["run_id"], ["new"]]}, created_order=2)
@@ -144,4 +144,4 @@ def test_read_proposal_sheet_rows_uses_the_latest_write_when_rerun_same_day():
 def test_constructor_requires_credentials():
     import pytest
     with pytest.raises(ValueError):
-        Layer7DriveClient(service_account_json="", root_folder_id="root")
+        Layer7DriveClient(oauth_token_json="", root_folder_id="root")

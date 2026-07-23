@@ -73,14 +73,14 @@ class FakeLayer6DriveClient(Layer6DriveClient):
 
 
 def test_write_markdown_report_creates_reports_folder():
-    client = FakeLayer6DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer6DriveClient(oauth_token_json="{}", root_folder_id="root")
     path = client.write_markdown_report("report_20260718.md", "# hello")
     assert path == "reports/report_20260718.md"
     assert "reports" in client.folders
 
 
 def test_write_markdown_report_twice_same_day_keeps_both_copies():
-    client = FakeLayer6DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer6DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_markdown_report("report_20260718.md", "# first")
     client.write_markdown_report("report_20260718.md", "# second")
     folder_id = client.folders["reports"]
@@ -93,7 +93,7 @@ def test_write_markdown_report_twice_same_day_keeps_both_copies():
 
 
 def test_write_proposal_spreadsheet_creates_multi_tab_spreadsheet_in_reports_folder():
-    client = FakeLayer6DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer6DriveClient(oauth_token_json="{}", root_folder_id="root")
     sheets_data = {"本日の提案": [["h1", "h2"], ["v1", "v2"]], "実行サマリー": [["a"], ["b"]]}
     path = client.write_proposal_spreadsheet("提案ログ_20260718", sheets_data)
     assert path == "reports/提案ログ_20260718"
@@ -104,7 +104,7 @@ def test_write_proposal_spreadsheet_creates_multi_tab_spreadsheet_in_reports_fol
 
 
 def test_write_report_index_entry_creates_new_index_when_none_exists():
-    client = FakeLayer6DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer6DriveClient(oauth_token_json="{}", root_folder_id="root")
     path = client.write_report_index_entry("202607", {"date": "2026-07-18"})
     assert path == "reports/report_index_202607.json"
     folder_id = client.folders["reports"]
@@ -113,7 +113,7 @@ def test_write_report_index_entry_creates_new_index_when_none_exists():
 
 
 def test_write_report_index_entry_appends_to_existing_index():
-    client = FakeLayer6DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer6DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_report_index_entry("202607", {"date": "2026-07-17"})
     client.write_report_index_entry("202607", {"date": "2026-07-18"})
     folder_id = client.folders["reports"]
@@ -122,11 +122,11 @@ def test_write_report_index_entry_appends_to_existing_index():
 
 
 def test_read_report_index_returns_none_when_missing():
-    client = FakeLayer6DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer6DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_report_index("202607") is None
 
 
 def test_constructor_requires_credentials():
     import pytest
     with pytest.raises(ValueError):
-        Layer6DriveClient(service_account_json="", root_folder_id="root")
+        Layer6DriveClient(oauth_token_json="", root_folder_id="root")

@@ -68,7 +68,7 @@ class FakeGoogleDriveRepository(GoogleDriveRepository):
 
 
 def test_save_snapshot_creates_folder_and_file():
-    repo = FakeGoogleDriveRepository(service_account_json="{}", root_folder_id="root")
+    repo = FakeGoogleDriveRepository(oauth_token_json="{}", root_folder_id="root")
     path = repo.save_snapshot("20260720", {"run_meta": {}})
     assert path == "snapshots/market_snapshot_20260720.json"
     assert "snapshots" in repo.folders
@@ -79,7 +79,7 @@ def test_save_snapshot_supersedes_existing_file_on_second_call():
     # ため、1回分の固定値でよい。
     fixed_time = datetime(2026, 7, 20, 9, 30, 0, tzinfo=timezone.utc)
     repo = FakeGoogleDriveRepository(
-        service_account_json="{}", root_folder_id="root", clock=lambda: fixed_time
+        oauth_token_json="{}", root_folder_id="root", clock=lambda: fixed_time
     )
 
     repo.save_snapshot("20260720", {"version": 1})
@@ -94,19 +94,19 @@ def test_save_snapshot_supersedes_existing_file_on_second_call():
 
 
 def test_save_completion_flag_uses_snapshots_subfolder():
-    repo = FakeGoogleDriveRepository(service_account_json="{}", root_folder_id="root")
+    repo = FakeGoogleDriveRepository(oauth_token_json="{}", root_folder_id="root")
     path = repo.save_completion_flag("20260720", {"completed": True})
     assert path == "snapshots/layer4_completed_20260720.json"
 
 
 def test_save_execution_log_uses_logs_subfolder():
-    repo = FakeGoogleDriveRepository(service_account_json="{}", root_folder_id="root")
+    repo = FakeGoogleDriveRepository(oauth_token_json="{}", root_folder_id="root")
     path = repo.save_execution_log("20260720", {"run_id": "x"})
     assert path == "logs/execution_log_20260720.json"
 
 
 def test_save_history_index_creates_new_index_when_none_exists():
-    repo = FakeGoogleDriveRepository(service_account_json="{}", root_folder_id="root")
+    repo = FakeGoogleDriveRepository(oauth_token_json="{}", root_folder_id="root")
     path = repo.save_history_index("202607", {"date": "2026-07-20"})
     assert path == "history/index_202607.json"
     folder_id = repo.folders["history"]
@@ -115,7 +115,7 @@ def test_save_history_index_creates_new_index_when_none_exists():
 
 
 def test_save_history_index_appends_to_existing_index():
-    repo = FakeGoogleDriveRepository(service_account_json="{}", root_folder_id="root")
+    repo = FakeGoogleDriveRepository(oauth_token_json="{}", root_folder_id="root")
     repo.save_history_index("202607", {"date": "2026-07-19"})
     repo.save_history_index("202607", {"date": "2026-07-20"})
 
@@ -125,7 +125,7 @@ def test_save_history_index_appends_to_existing_index():
 
 
 def test_folder_lookup_is_cached_within_instance():
-    repo = FakeGoogleDriveRepository(service_account_json="{}", root_folder_id="root")
+    repo = FakeGoogleDriveRepository(oauth_token_json="{}", root_folder_id="root")
     repo.save_snapshot("20260720", {})
     repo.save_completion_flag("20260720", {})
     # 両方とも同じ"snapshots"フォルダを使うが、_create_folderは1回しか呼ばれない
@@ -138,4 +138,4 @@ def test_constructor_requires_credentials():
     import pytest
 
     with pytest.raises(ValueError):
-        GoogleDriveRepository(service_account_json="", root_folder_id="root")
+        GoogleDriveRepository(oauth_token_json="", root_folder_id="root")

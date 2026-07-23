@@ -182,14 +182,14 @@ def main() -> int:
     else:
         from .drive_client import Layer5DriveClient
 
-        service_account_json = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "")
+        oauth_token_json = os.environ.get("GOOGLE_OAUTH_TOKEN_JSON", "")
         folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
-        if not service_account_json or not folder_id:
+        if not oauth_token_json or not folder_id:
             print(json.dumps({"status": "blocked", "reason_code": "PORTFOLIO_STATE_INVALID",
                                "error": "LAYER5_LOCAL_DATA_DIR、または"
-                               "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON/GOOGLE_DRIVE_FOLDER_IDが未設定"}))
+                               "GOOGLE_OAUTH_TOKEN_JSON/GOOGLE_DRIVE_FOLDER_IDが未設定"}))
             return 1
-        client = Layer5DriveClient(service_account_json=service_account_json, root_folder_id=folder_id)
+        client = Layer5DriveClient(oauth_token_json=oauth_token_json, root_folder_id=folder_id)
 
     result = run_load_portfolio_state(client, capital_policy, sector_mapping)
     print(json.dumps(result, ensure_ascii=False, default=str))

@@ -55,26 +55,26 @@ class FakeGoogleDriveCacheStore(GoogleDriveCacheStore):
 
 def test_get_returns_none_when_no_remote_file_exists():
     store = FakeGoogleDriveCacheStore(
-        service_account_json="{}", folder_id="folder-1"
+        oauth_token_json="{}", folder_id="folder-1"
     )
     assert store.get("some-key") is None
 
 
 def test_set_then_get_within_same_instance():
-    store = FakeGoogleDriveCacheStore(service_account_json="{}", folder_id="folder-1")
+    store = FakeGoogleDriveCacheStore(oauth_token_json="{}", folder_id="folder-1")
     store.set("k", "v")
     assert store.get("k") == "v"
 
 
 def test_flush_does_nothing_when_not_dirty():
-    store = FakeGoogleDriveCacheStore(service_account_json="{}", folder_id="folder-1")
+    store = FakeGoogleDriveCacheStore(oauth_token_json="{}", folder_id="folder-1")
     store.flush()
     assert store.upload_calls == 0
     assert store.create_calls == 0
 
 
 def test_flush_creates_new_file_when_none_existed():
-    store = FakeGoogleDriveCacheStore(service_account_json="{}", folder_id="folder-1")
+    store = FakeGoogleDriveCacheStore(oauth_token_json="{}", folder_id="folder-1")
     store.set("k", "v")
     store.flush()
     assert store.create_calls == 1
@@ -83,7 +83,7 @@ def test_flush_creates_new_file_when_none_existed():
 
 def test_flush_updates_existing_file():
     store = FakeGoogleDriveCacheStore(
-        service_account_json="{}", folder_id="folder-1", existing_remote_data={"old": ("value", None)}
+        oauth_token_json="{}", folder_id="folder-1", existing_remote_data={"old": ("value", None)}
     )
     store.set("new-key", "new-value")
     store.flush()
@@ -93,7 +93,7 @@ def test_flush_updates_existing_file():
 
 def test_loads_existing_remote_data_on_first_access():
     store = FakeGoogleDriveCacheStore(
-        service_account_json="{}",
+        oauth_token_json="{}",
         folder_id="folder-1",
         existing_remote_data={"prior-key": ("prior-value", None)},
     )
@@ -103,7 +103,7 @@ def test_loads_existing_remote_data_on_first_access():
 def test_ttl_expiry_marks_dirty_and_flush_persists_removal():
     clock = FakeClock()
     store = FakeGoogleDriveCacheStore(
-        service_account_json="{}",
+        oauth_token_json="{}",
         folder_id="folder-1",
         clock=clock,
         existing_remote_data={"k": ("v", 10.0)},
@@ -122,13 +122,13 @@ def test_constructor_requires_credentials():
     import pytest
 
     with pytest.raises(ValueError):
-        GoogleDriveCacheStore(service_account_json="", folder_id="folder-1")
+        GoogleDriveCacheStore(oauth_token_json="", folder_id="folder-1")
     with pytest.raises(ValueError):
-        GoogleDriveCacheStore(service_account_json="{}", folder_id="")
+        GoogleDriveCacheStore(oauth_token_json="{}", folder_id="")
 
 
 def test_build_default_cache_store_uses_in_memory_when_env_missing(monkeypatch):
-    monkeypatch.delenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GOOGLE_OAUTH_TOKEN_JSON", raising=False)
     monkeypatch.delenv("GOOGLE_DRIVE_FOLDER_ID", raising=False)
 
     store = build_default_cache_store()
@@ -137,7 +137,7 @@ def test_build_default_cache_store_uses_in_memory_when_env_missing(monkeypatch):
 
 
 def test_build_default_cache_store_uses_google_drive_when_env_present(monkeypatch):
-    monkeypatch.setenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "{}")
+    monkeypatch.setenv("GOOGLE_OAUTH_TOKEN_JSON", "{}")
     monkeypatch.setenv("GOOGLE_DRIVE_FOLDER_ID", "folder-123")
 
     store = build_default_cache_store()

@@ -6,6 +6,13 @@
 # Layer3（ニュース処理層）: google-genai（GeminiStructurer、コスト最適化のため採用）。
 #   anthropicはClaudeStructurer用に維持（provider: claudeへ戻す場合の代替経路として残す）
 # Layer4（永続化層／Google Drive連携）: google-api-python-client, google-auth, google-auth-httplib2
+#   2026-07-22時点、Google Drive/Sheets書き込みはサービスアカウントではなくOAuth 2.0
+#   ユーザー認証（リフレッシュトークン方式）に統一した（common/google_oauth_auth.py参照。
+#   サービスアカウントは個人のGoogle Drive保存容量を持たず、新規ファイル作成が
+#   403 insufficientParentPermissionsで失敗するため）。本番実行（GitHub Actions）で必要な
+#   のはgoogle-authのgoogle.oauth2.credentials.Credentialsのみで、google-auth-oauthlibは
+#   scripts/generate_google_oauth_token.py（リフレッシュトークンの初回発行、ローカル専用）
+#   でのみ使用する。
 # 全レイヤー共通: python-dotenv（ローカル開発時の.env読み込み）, jsonschema（各レイヤーのJSON契約検証）
 # テスト: pytest
 
@@ -17,6 +24,7 @@ jsonschema>=4.21,<5
 google-api-python-client>=2.120,<3
 google-auth>=2.28,<3
 google-auth-httplib2>=0.2,<1
+google-auth-oauthlib>=1.2,<2
 anthropic>=0.40,<1
 google-genai>=1.0,<3
 pytest>=8.0,<9

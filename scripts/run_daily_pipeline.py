@@ -314,7 +314,10 @@ def main() -> int:
         articles = layer3_fetcher.fetch_all(news_chain, MACRO_NEWS_QUERIES, candidate_tickers, since, until)
 
         structurer = build_structurer(ai_provider_config)
-        universe_tickers = list(candidate_tickers)
+        # prompt_common.build_prompt()は{"ticker":..., "name":...}の辞書リストを期待する
+        # （2026-07-22のライブ実行で判明した回帰：素のticker文字列リストを渡すと
+        # `t['ticker']`アクセスでTypeErrorになる、tests/layer3/test_main.py参照）。
+        universe_tickers = [{"ticker": c["ticker"], "name": c.get("name", c["ticker"])} for c in candidates_raw]
         sector_master = sorted(set(sector_mapping_config.get("sectors", {}).values()))
 
         result = layer3_main.process_articles(
@@ -367,16 +370,16 @@ def main() -> int:
     )
 
     # --- Layer4（永続化） ---------------------------------------------------------
-    service_account_json = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
+    oauth_token_json = os.environ.get("GOOGLE_OAUTH_TOKEN_JSON")
     folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID")
-    if not service_account_json or not folder_id:
+    if not oauth_token_json or not folder_id:
         logger.error(
-            "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON / GOOGLE_DRIVE_FOLDER_ID not set; "
+            "GOOGLE_OAUTH_TOKEN_JSON / GOOGLE_DRIVE_FOLDER_ID not set; "
             "cannot persist layer2_output to Google Drive."
         )
         return 1
 
-    repository = GoogleDriveRepository(service_account_json, folder_id)
+    repository = GoogleDriveRepository(oauth_token_json, folder_id)
     layer_status = {
         "layer1": "success" if not any(e["source_layer"] == "layer1" for e in critical_errors) else "failed",
         "layer2": "success",

@@ -55,12 +55,12 @@ class FakeLayer5DriveClient(Layer5DriveClient):
 
 
 def test_read_json_returns_none_when_folder_missing():
-    client = FakeLayer5DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer5DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_json("snapshots", "market_snapshot_20260718.json") is None
 
 
 def test_read_json_returns_parsed_content():
-    client = FakeLayer5DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer5DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.folders["snapshots"] = "snapshots-id"
     client.add_file("snapshots-id", "market_snapshot_20260718.json", b'{"a": 1}')
     result = client.read_json("snapshots", "market_snapshot_20260718.json")
@@ -68,14 +68,14 @@ def test_read_json_returns_parsed_content():
 
 
 def test_read_json_with_no_subfolder_uses_root():
-    client = FakeLayer5DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer5DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.add_file("root", "layer4_completed_20260718.json", b'{"completed": true}')
     result = client.read_json(None, "layer4_completed_20260718.json")
     assert result == {"completed": True}
 
 
 def test_read_latest_text_by_prefix_picks_lexicographically_max_name():
-    client = FakeLayer5DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer5DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.add_file("root", "取引記録_20260701T000000Z.csv", "old".encode("utf-8"))
     client.add_file("root", "取引記録_20260717T014126Z.csv", "new".encode("utf-8"))
     result = client.read_latest_text_by_prefix(None, "取引記録_")
@@ -83,19 +83,19 @@ def test_read_latest_text_by_prefix_picks_lexicographically_max_name():
 
 
 def test_read_latest_text_by_prefix_returns_none_when_no_match():
-    client = FakeLayer5DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer5DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_latest_text_by_prefix(None, "取引記録_") is None
 
 
 def test_write_decision_creates_decisions_folder_and_file_without_supersede():
-    client = FakeLayer5DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer5DriveClient(oauth_token_json="{}", root_folder_id="root")
     path = client.write_decision("decision_20260718T063440Z.json", {"run_meta": {}})
     assert path == "decisions/decision_20260718T063440Z.json"
     assert "decisions" in client.folders
 
 
 def test_write_decision_twice_same_day_does_not_overwrite_first():
-    client = FakeLayer5DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer5DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_decision("decision_20260718T063440Z.json", {"run": 1})
     client.write_decision("decision_20260718T091500Z.json", {"run": 2})
     folder_id = client.folders["decisions"]
@@ -106,4 +106,4 @@ def test_write_decision_twice_same_day_does_not_overwrite_first():
 def test_constructor_requires_credentials():
     import pytest
     with pytest.raises(ValueError):
-        Layer5DriveClient(service_account_json="", root_folder_id="root")
+        Layer5DriveClient(oauth_token_json="", root_folder_id="root")

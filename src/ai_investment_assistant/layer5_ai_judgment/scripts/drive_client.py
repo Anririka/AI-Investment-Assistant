@@ -23,13 +23,13 @@ from typing import Any, Callable, Optional
 class Layer5DriveClient:
     def __init__(
         self,
-        service_account_json: str,
+        oauth_token_json: str,
         root_folder_id: str,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
-        if not service_account_json or not root_folder_id:
-            raise ValueError("service_account_json and root_folder_id are required")
-        self._service_account_json = service_account_json
+        if not oauth_token_json or not root_folder_id:
+            raise ValueError("oauth_token_json and root_folder_id are required")
+        self._oauth_token_json = oauth_token_json
         self._root_folder_id = root_folder_id
         self._clock = clock
         self._folder_cache: dict = {}
@@ -37,14 +37,12 @@ class Layer5DriveClient:
     # --- Google Drive API呼び出し（実際の通信、lazy import） -----------------------
 
     def _get_drive_service(self) -> Any:
-        import json as _json
-
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
 
-        info = _json.loads(self._service_account_json)
-        credentials = service_account.Credentials.from_service_account_info(
-            info, scopes=["https://www.googleapis.com/auth/drive"]
+        from ...common.google_oauth_auth import build_oauth_credentials
+
+        credentials = build_oauth_credentials(
+            self._oauth_token_json, scopes=["https://www.googleapis.com/auth/drive"]
         )
         return build("drive", "v3", credentials=credentials)
 

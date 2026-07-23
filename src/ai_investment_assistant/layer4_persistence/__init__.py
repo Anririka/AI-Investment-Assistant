@@ -17,9 +17,10 @@
   market_snapshot → execution_log → history index → completion flag
   全て成功した場合のみcompleted:trueを書く。1つでも失敗すれば書かない（毒薬テスト、§9）。
 
-未実装・要検討事項:
-  - GoogleDriveRepositoryの実際のGoogle Drive APIレスポンスは未検証（このクラウド
-    作業環境にGOOGLE_DRIVE_SERVICE_ACCOUNT_JSON等は共有されているが、Layer4の実行
-    自体はまだGitHub Actionsパイプラインに組み込まれていない。Layer5実装後、
-    Layer1〜4を通しで実行するタイミングでライブ検証する）
+実行状況（2026-07-22）:
+  - Layer1〜4は scripts/run_daily_pipeline.py としてGitHub Actionsに組み込み済み。
+  - GoogleDriveRepositoryの認証方式は、サービスアカウントJSON鍵ではなくOAuth 2.0
+    ユーザー認証（GOOGLE_OAUTH_TOKEN_JSON、common/google_oauth_auth.py参照）に統一した。
+    サービスアカウントは個人のGoogle Drive（マイドライブ）の保存容量を持たず、新規ファイル
+    作成が403 insufficientParentPermissionsで失敗する仕様上の制約があるため。
 """

@@ -70,14 +70,14 @@ class GoogleDriveCacheStore(CacheStore):
 
     def __init__(
         self,
-        service_account_json: str,
+        oauth_token_json: str,
         folder_id: str,
         file_name: str = "layer1_cache_index.pkl",
         clock: Callable[[], float] = time.time,
     ) -> None:
-        if not service_account_json or not folder_id:
-            raise ValueError("service_account_json and folder_id are required")
-        self._service_account_json = service_account_json
+        if not oauth_token_json or not folder_id:
+            raise ValueError("oauth_token_json and folder_id are required")
+        self._oauth_token_json = oauth_token_json
         self._folder_id = folder_id
         self._file_name = file_name
         self._clock = clock
@@ -86,14 +86,12 @@ class GoogleDriveCacheStore(CacheStore):
         self._dirty = False
 
     def _get_drive_service(self) -> Any:
-        import json as _json
-
-        from google.oauth2 import service_account
         from googleapiclient.discovery import build
 
-        info = _json.loads(self._service_account_json)
-        credentials = service_account.Credentials.from_service_account_info(
-            info, scopes=["https://www.googleapis.com/auth/drive"]
+        from ..common.google_oauth_auth import build_oauth_credentials
+
+        credentials = build_oauth_credentials(
+            self._oauth_token_json, scopes=["https://www.googleapis.com/auth/drive"]
         )
         return build("drive", "v3", credentials=credentials)
 
@@ -175,16 +173,16 @@ class GoogleDriveCacheStore(CacheStore):
 def build_default_cache_store() -> CacheStore:
     """環境変数からCacheStoreを自動選択する。
 
-    `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON`・`GOOGLE_DRIVE_FOLDER_ID`が両方設定されて
+    `GOOGLE_OAUTH_TOKEN_JSON`・`GOOGLE_DRIVE_FOLDER_ID`が両方設定されて
     いればGoogleDriveCacheStore（本番用）を、そうでなければInMemoryCacheStore
     （ローカル開発・テスト用）を返す。
     """
     import os
 
-    service_account_json = os.environ.get("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON")
+    oauth_token_json = os.environ.get("GOOGLE_OAUTH_TOKEN_JSON")
     folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID")
-    if service_account_json and folder_id:
-        return GoogleDriveCacheStore(service_account_json, folder_id)
+    if oauth_token_json and folder_id:
+        return GoogleDriveCacheStore(oauth_token_json, folder_id)
     return InMemoryCacheStore()
 
 

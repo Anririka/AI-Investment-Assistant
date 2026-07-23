@@ -78,12 +78,12 @@ class FakeLayer8DriveClient(Layer8DriveClient):
 
 
 def test_read_closed_positions_returns_none_when_missing():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_closed_positions("202607") is None
 
 
 def test_read_closed_positions_returns_parsed_content():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.folders["tracking"] = "tracking-id"
     client.add_json_file("tracking-id", "closed_positions_202607.json", {"positions": [{"tracking_id": "TRK-1"}]})
     result = client.read_closed_positions("202607")
@@ -91,19 +91,19 @@ def test_read_closed_positions_returns_parsed_content():
 
 
 def test_read_latest_layer7_completed_flag_returns_none_when_missing():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_latest_layer7_completed_flag("20260718") is None
 
 
 def test_read_latest_layer7_completed_flag_returns_content():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.folders["tracking"] = "tracking-id"
     client.add_json_file("tracking-id", "layer7_completed_20260718.json", {"completed": True})
     assert client.read_latest_layer7_completed_flag("20260718") == {"completed": True}
 
 
 def test_read_proposal_sheet_rows_parses_header_and_rows():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.folders["reports"] = "reports-id"
     client.add_spreadsheet("reports-id", "提案ログ_20260718", {
         "本日の提案": [["run_id", "証券コード"], ["20260718-0630", "NVDA"]],
@@ -113,18 +113,18 @@ def test_read_proposal_sheet_rows_parses_header_and_rows():
 
 
 def test_read_proposal_sheet_rows_returns_none_when_reports_folder_missing():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     assert client.read_proposal_sheet_rows("20260718") is None
 
 
 def test_write_evaluation_json_creates_then_reads_back():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_evaluation_json("evaluation_index.json", {"evaluated_tracking_ids": ["TRK-1"]})
     assert client.read_evaluation_json("evaluation_index.json") == {"evaluated_tracking_ids": ["TRK-1"]}
 
 
 def test_write_evaluation_json_updates_existing_in_place():
-    client = FakeLayer8DriveClient(service_account_json="{}", root_folder_id="root")
+    client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.write_evaluation_json("evaluation_index.json", {"evaluated_tracking_ids": ["TRK-1"]})
     client.write_evaluation_json("evaluation_index.json", {"evaluated_tracking_ids": ["TRK-1", "TRK-2"]})
     folder_id = client.folders["evaluation"]
@@ -135,4 +135,4 @@ def test_write_evaluation_json_updates_existing_in_place():
 def test_constructor_requires_credentials():
     import pytest
     with pytest.raises(ValueError):
-        Layer8DriveClient(service_account_json="", root_folder_id="root")
+        Layer8DriveClient(oauth_token_json="", root_folder_id="root")
