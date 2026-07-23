@@ -39,6 +39,10 @@ class Layer8DriveClient:
         return build("drive", "v3", credentials=credentials)
 
     def _get_sheets_service(self) -> Any:
+        """注意（2026-07-23）：`spreadsheets.readonly`/`drive.readonly`ではなく、
+        他クライアントと同じ`spreadsheets`/`drive`（フルスコープ）を使う。理由は
+        layer7_proposal_tracking/drive_client.py の_get_sheets_service参照。
+        """
         from googleapiclient.discovery import build
 
         from ..common.google_oauth_auth import build_oauth_credentials
@@ -46,8 +50,8 @@ class Layer8DriveClient:
         credentials = build_oauth_credentials(
             self._oauth_token_json,
             scopes=[
-                "https://www.googleapis.com/auth/spreadsheets.readonly",
-                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive",
             ],
         )
         return build("sheets", "v4", credentials=credentials)

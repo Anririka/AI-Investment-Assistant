@@ -44,6 +44,13 @@ class Layer7DriveClient:
         return build("drive", "v3", credentials=credentials)
 
     def _get_sheets_service(self) -> Any:
+        """注意（2026-07-23）：`spreadsheets.readonly`/`drive.readonly`ではなく、
+        他クライアントと同じ`spreadsheets`/`drive`（フルスコープ）を使う。OAuth
+        ユーザー認証のrefresh_tokenは、scripts/generate_google_oauth_token.pyで
+        実際に同意した2スコープ（drive・spreadsheets、いずれもフル）に紐づいており、
+        同意していないreadonly系スコープをrefresh時に要求すると
+        `invalid_scope: Bad Request`で失敗するため（ライブ実行で確認済み）。
+        """
         from googleapiclient.discovery import build
 
         from ..common.google_oauth_auth import build_oauth_credentials
@@ -51,8 +58,8 @@ class Layer7DriveClient:
         credentials = build_oauth_credentials(
             self._oauth_token_json,
             scopes=[
-                "https://www.googleapis.com/auth/spreadsheets.readonly",
-                "https://www.googleapis.com/auth/drive.readonly",
+                "https://www.googleapis.com/auth/spreadsheets",
+                "https://www.googleapis.com/auth/drive",
             ],
         )
         return build("sheets", "v4", credentials=credentials)

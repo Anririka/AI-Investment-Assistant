@@ -49,8 +49,13 @@ def check_google_drive() -> None:
 
     from ai_investment_assistant.common.google_oauth_auth import build_oauth_credentials
 
+    # 注意（2026-07-23）：`drive.readonly`ではなく`drive`（フルスコープ）を使う。
+    # OAuthユーザー認証のrefresh_tokenは、scripts/generate_google_oauth_token.pyで
+    # 実際に同意した2スコープ（drive・spreadsheets、いずれもフル）にしか紐づいて
+    # おらず、同意していないreadonly系スコープをrefresh時に要求すると
+    # `invalid_scope: Bad Request`で失敗する（ライブ実行で確認済み）。
     credentials = build_oauth_credentials(
-        oauth_token_json, scopes=["https://www.googleapis.com/auth/drive.readonly"]
+        oauth_token_json, scopes=["https://www.googleapis.com/auth/drive"]
     )
     drive = build("drive", "v3", credentials=credentials)
     folder = drive.files().get(fileId=folder_id, fields="id, name").execute()
