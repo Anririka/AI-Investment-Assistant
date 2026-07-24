@@ -131,6 +131,14 @@ FRED_SERIES_MAP = {
     "leading_index": "USSLIND",
 }
 
+# 2026-07-24追加：米国株のposition_sizer.py新規発注計算に必須の為替レート
+# （円換算漏れで予算の約50倍規模の提案が生成される重大バグが発覚したための対応）。
+# macro_evaluatorのスコアリング対象であるFRED_SERIES_MAPとは意図的に分離し、
+# market_snapshot.jsonの独立したトップレベルフィールド"fx_rates"として出力する
+# （layer2_output.schema.jsonはトップレベルでadditionalProperties: trueのため、
+# 既存スキーマ・macro_evaluatorのスコアリングロジックには一切影響しない追加）。
+USD_JPY_FRED_SERIES_ID = "DEXJPUS"  # Japan / U.S. Foreign Exchange Rate
+
 # ニュース取得(a)：主要指数・マクロ全般の固定クエリ（layer3_news_processing_design.md §4）
 MACRO_NEWS_QUERIES = ["Nikkei 225", "S&P 500", "FOMC", "Bank of Japan", "CPI inflation"]
 
@@ -320,6 +328,40 @@ def _fetch_macro_series_map(macro_chain, start: date, end: date, warning_errors:
     return series_map
 
 
+def _fetch_usd_jpy_rate(macro_chain, start: date, end: date, warning_errors: list) -> "float | None":
+    """米ドル円レート（直近値）をFRED経由で取得する（2026-07-24追加）。
+
+    position_sizer.py（Layer5）が米国株の新規発注の資金管理計算に必須で使う
+    （為替換算漏れの重大バグ修正、jquants側の変更ではなくposition_sizer.py側の
+    修正とセットで導入した）。取得できない場合はNoneを返し、warning_errorsに記録する
+    （非致命：Layer5側でNoneの場合は米国株の新規発注を安全側で見送る設計とする想定）。
+    """
+    try:
+        series = macro_chain.call("get_series", USD_JPY_FRED_SERIES_ID, start, end)
+    except DataSourceError as exc:
+        logger.warning("usd_jpy_rate fetch failed (%s): %s", USD_JPY_FRED_SERIES_ID, exc)
+        warning_errors.append(
+            {
+                "code": "MINOR_SOURCE_TIMEOUT",
+                "message": f"米ドル円レート({USD_JPY_FRED_SERIES_ID})の取得に失敗: {exc}",
+                "source_layer": "layer1",
+            }
+        )
+        return None
+    if not series.points:
+        logger.warning("usd_jpy_rate fetch returned no points (%s)", USD_JPY_FRED_SERIES_ID)
+        warning_errors.append(
+            {
+                "code": "MINOR_SOURCE_TIMEOUT",
+                "message": f"米ドル円レート({USD_JPY_FRED_SERIES_ID})のデータが0件",
+                "source_layer": "layer1",
+            }
+        )
+        return None
+    latest_point = max(series.points, key=lambda p: p.date)
+    return latest_point.value
+
+
 def _time_series_to_price_series(series, ticker: str) -> PriceSeries:
     """FREDのTimeSeries（日次終値のみ）をPriceSeriesへ変換する（2026-07-24追加）。
 
@@ -423,11 +465,13 @@ def main() -> int:
     try:
         macro_chain = factory.build_chain("macro")
         macro_series_map = _fetch_macro_series_map(macro_chain, macro_start, price_end, warning_errors)
+        usd_jpy_rate = _fetch_usd_jpy_rate(macro_chain, macro_start, price_end, warning_errors)
     except Exception as exc:  # noqa: BLE001
         logger.exception("macro chain build failed")
         critical_errors.append({"code": "SNAPSHOT_MISSING", "message": f"macro chain構築に失敗: {exc}", "source_layer": "layer1"})
         macro_series_map = {}
         macro_chain = None
+        usd_jpy_rate = None
 
     # --- 市場レジーム判定用の指数（2026-07-24変更：J-Quantsの指数APIがLightプランでは
     # 利用不可だったため、マクロ系列と同じFRED経由（macro_chain）で取得するようにした） ---
@@ -494,6 +538,13 @@ def main() -> int:
         upstream_excluded_summary=excluded_summary,
         degraded_sources=sorted(degraded_sources),
     )
+
+    # 2026-07-24追加：米国株の新規発注計算（Layer5 position_sizer.py）に必須の
+    # 為替レートを、既存のLayer2出力スキーマを変更せず追加する（トップレベルで
+    # additionalProperties: trueのため、既存の必須フィールド・スコアリングロジックには
+    # 影響しない）。取得できなかった場合はNoneとし、Layer5側で「米国株の新規発注を
+    # 安全側で見送る」判断に使うことを想定する。
+    layer2_output["fx_rates"] = {"usd_jpy": usd_jpy_rate}
 
     logger.info(
         "layer2 output: %d candidates, %d critical_errors, %d warning_errors",
