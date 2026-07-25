@@ -41,9 +41,16 @@ Bashツールで実行して行う。あなた自身が暗算で数値を確定�
 - `preliminary_quant_rank`：Layer2が定量指標のみで暫定的に算出した順位（あなたの判断は
   参考にしつつ最終順位を決めてよいが、3件制限時の絞り込みには`preliminary_quant_rank`が
   優先される。§2-4参照）
-- 各評価軸（`technical`／`fundamental`／`supply_demand`／`news`／`regime_fit`）の
-  `axis_score`・`axis_score_reason`（`news`のみ `score`・`uncertainty`・
-  `axis_score_reason`という構造）
+- 各評価軸の確定済みスコア（`score_summary`へそのまま転記すること。書き写す際の
+  フィールド名の対応関係に注意）：
+  * `technical`／`fundamental`／`supply_demand`：`axis_score`（0〜100の数値）
+  * `news`：`score`・`uncertainty`（`axis_score`という名前ではない）
+  * `regime_fit`：`score`（0〜100の数値。こちらも`axis_score`という名前ではなく、
+    `technical`等とはフィールド名が異なる点に注意。2026-07-24のライブ実行で、
+    この違いに気づかずLLMが`regime_fit`にニュース軸と同じ既定値50を代入してしまい、
+    Layer2が実際に計算した値（例：レンジ相場なら60）を使っていなかった実例がある）
+  各軸には`reason`／`reason_code`（`regime_fit`）または`axis_score_reason`
+  （`technical`等）も付随する
 - `composite_score.total`：総合スコア
 - `run_meta.data_quality`：データ品質情報（`critical_errors`／`warning_errors`）
 
@@ -146,34 +153,8 @@ API呼び出しは機能しない）。実際のGoogle Driveとの読み書き�
    自身の推論部分であり、コード実行ではない）。
 4. `scripts/rule_enforcer.py` を実行し、信頼度ゲート・1日3件上限をあなたの判断結果に
    機械的に適用する。
-5. `scripts/position_sizer.py`の`allocate_positions()`を呼び出し、最終的に採用された
-   提案の推奨株数・損切/利確価格を確定計算する（このモジュールにはCLIの`main()`が無い
-   ため、Bashツールで`PYTHONPATH=src python3 -c "..."`のような形でPythonコードとして
-   直接呼び出すこと。例：
-   ```
-   PYTHONPATH=src python3 -c "
-   import json, sys
-   from ai_investment_assistant.layer5_ai_judgment.scripts.position_sizer import allocate_positions
-   candidates = json.load(open('/path/to/candidates.json'))
-   result = allocate_positions(
-       candidates, available_capital=..., total_capital=...,
-       take_profit_policy={...}, usd_jpy_rate=usd_jpy_rate,
-   )
-   print(json.dumps(result, ensure_ascii=False))
-   "
-   ```
-   ）。
-
-   **重要（2026-07-24追加、重大バグ修正）**：`usd_jpy_rate`は必須引数である。
-   market_snapshot.jsonのトップレベル`fx_rates.usd_jpy`から現在の米ドル円レートを
-   読み取り、そのまま渡すこと。このレートが`null`（取得失敗）の場合、米国株の
-   新規発注は一切行わず（円換算できない状態で計算すると、予算を大きく超えた誤った
-   提案になりかねないため）、対象の米国株候補は"not_selected"として様子見にすること。
-   以前（2026-07-24より前）は為替換算が一切行われておらず、米ドル建ての価格を
-   そのまま円建てのtotal_capitalで計算してしまい、実際の予算の数十倍規模の提案
-   （例：NVDA395株・実勢レートで1,200万円超相当）が生成される重大なバグがあった。
-   このバグは修正済みだが、`usd_jpy_rate`を渡し忘れると同じ問題が再発するため、
-   必ず明示的に渡すこと。
+5. `scripts/position_sizer.py` を実行し、最終的に採用された提案の推奨株数・損切/利確
+   価格を確定計算する。
 6. 組み立てた最終decision document（`run_meta`／`proposals`／`decision_log`／
    `rule_enforcement_log`）をJSONファイルとして書き出し、
    `scripts/decision_writer.py <そのファイルパス>` を実行する。ローカルの
