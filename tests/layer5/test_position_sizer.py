@@ -3,8 +3,12 @@
 2026-07-24追加：米国株の為替換算漏れバグ（NVDA $208.76が円建て予算にそのまま
 適用され、想定の約50倍の規模になった実例）を受け、`size_position()`の
 `fx_rate_to_jpy`・`allocate_positions()`の`usd_jpy_rate`は必須引数とした。
-既存テストは日本株相当（fx_rate_to_jpy=1.0）を明示的に渡すよう更新し、
-為替換算が実際に効くことを検証する回帰テストを新設した。
+
+2026-07-26追加：日本株も単元未満株（SBI証券のS株等、1株単位の売買）を使う前提に
+切り替えたため、日本株の100株単位切り下げに関するテストは、1株単位切り下げに
+更新した。以前の「テスト期間中の資金(25万円)では日本株が100株単位のため
+構造的に一切約定できない」問題（トヨタ自動車=289,700円必要 > 25万円）を
+1株単位化で解消できることを検証する回帰テストも追加した。
 """
 
 import pytest
@@ -61,11 +65,14 @@ def test_size_position_us_equity_floors_to_integer_shares():
     assert result["recommended_shares"] == int(990000 // 333.74)
 
 
-def test_size_position_japan_equity_floors_to_100_share_lots():
+def test_size_position_japan_equity_floors_to_1_share_unit():
+    # 2026-07-26変更：日本株も単元未満株（1株単位）で計算するため、100の倍数である
+    # 必要はない。2500円の株を3,000,000円の資金・33%上限(990,000円)で計算すると
+    # floor(990000/2500)=396株になるはず（100株単位縛りなら300株止まりだった）。
     candidate = _candidate(ticker="7203", asset_class="japan_equity", entry_price_basis=2500)
     result = size_position(candidate, available_capital=3000000, total_capital=3000000,
                             take_profit_policy=TP_POLICY, fx_rate_to_jpy=1.0)
-    assert result["recommended_shares"] % 100 == 0
+    assert result["recommended_shares"] == int(990000 // 2500)
 
 
 def test_size_position_stop_loss_and_take_profit_prices():
@@ -84,14 +91,26 @@ def test_size_position_zero_shares_when_price_exceeds_available_capital():
     assert result["reason_code"] == "INSUFFICIENT_FUNDS_ZERO_SHARES"
 
 
-def test_size_position_zero_shares_when_per_position_cap_too_small_for_japan_lot():
-    # total_capital=250000 (test phase) -> 33% cap = 82500円。2500円株で100株単位だと
-    # 250000円必要になり上限を超えるため0株になる。
-    candidate = _candidate(ticker="7203", asset_class="japan_equity", entry_price_basis=2500)
+def test_size_position_zero_shares_when_even_1_share_exceeds_cap():
+    # 1株単位化後も、1株の価格自体が上限を超えていれば0株になることは変わらない。
+    candidate = _candidate(ticker="6861", asset_class="japan_equity", entry_price_basis=71820)
     result = size_position(candidate, available_capital=250000, total_capital=250000,
                             take_profit_policy=TP_POLICY, fx_rate_to_jpy=1.0)
-    assert result["excluded"] is True
-    assert result["reason_code"] == "INSUFFICIENT_FUNDS_ZERO_SHARES"
+    # 33% cap = 82,500円。71,820円は1株なら買えるが、2株目は買えないはず。
+    assert result["excluded"] is False
+    assert result["recommended_shares"] == 1
+
+
+def test_size_position_japan_equity_toyota_scale_now_buyable_with_test_phase_capital():
+    # 実データで確認された問題の回帰テスト：test_phase資金(25万円)・33%上限(82,500円)に
+    # 対し、トヨタ自動車(終値2,897円)は100株単位だと289,700円必要で総資金自体を上回り
+    # 構造的に一切約定できなかった。1株単位化後はfloor(82500/2897)=28株が買えるはず。
+    candidate = _candidate(ticker="7203", asset_class="japan_equity", entry_price_basis=2897)
+    result = size_position(candidate, available_capital=250000, total_capital=250000,
+                            take_profit_policy=TP_POLICY, fx_rate_to_jpy=1.0)
+    assert result["excluded"] is False
+    assert result["recommended_shares"] == int((250000 * 0.33) // 2897)
+    assert result["recommended_shares"] > 0
 
 
 def test_size_position_applies_out_of_range_take_profit_and_logs_it():

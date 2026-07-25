@@ -26,22 +26,17 @@ data_quality_policy.yamlのwarning_errors語彙）。個別ティッカーの取
 未解決の設計ギャップ（本スクリプト実装時に判明。既存モジュールの契約は変更していない。
 値は暫定のフォールバックとして扱い、上位の人間レビューに委ねる）：
 
-  1. 【市場レジーム判定用の指数ティッカー（2026-07-24対応、解消）】regime_detector.
-     detect_regime()は指数PriceSeriesを要求する。まず日経平均株価（プレースホルダー
-     コード"998407"）を個別銘柄用の`get_daily_prices`で取得しようとしていたが常に
-     失敗し、調査の結果、日経平均株価自体がJ-Quantsで提供されていないことが判明した。
-     次にJ-Quants自身が公式に提供するTOPIX（指数コード"0000"）に切り替え、専用の
-     `get_index_daily_prices`メソッド（`/indices/bars/daily`エンドポイント）を実装
-     したが、ライブ実行で`403 This API is not available on your subscription`と
-     なり、契約中のLightプランでは指数データ自体が利用不可なことが判明した（有料の
-     Standard以上のプランが必要）。ユーザーの判断でプラン変更はせず、既にAPIキーを
-     保有し無料で使えるFRED（他のマクロ系列取得にも使用中）に、日経平均株価の系列
-     （series_id: "NIKKEI225"）が存在することを確認し、そちらに切り替えた
-     （`_fetch_index_series`参照。FREDは日次終値のみでOHLCを提供しないため、
-     high=low=close（＝当日の変動幅情報は持たない、終値ベースのADX近似）として
-     PriceSeriesへ変換している。取得失敗時は引き続き「レンジ相場」にフォールバック
-     する（クラッシュはさせない）。ADXの日中値幅を使わない近似のため、真のOHLCを
-     使った場合よりトレンド強度判定の精度はやや落ちる点に注意）。
+  1. 【市場レジーム判定用の指数ティッカー、2026-07-24解消】regime_detector.detect_regime()は
+     日経平均等の指数PriceSeriesを要求する。当初はJ-Quantsの日経平均株価ティッカーを
+     直接叩く想定だったが、J-Quants Lightプラン（無料）では指数API
+     （/indices/bars/daily）が403 "not available on your subscription"となり利用不可
+     と判明した（ユーザーの明示判断によりプラン変更は行わない）。次にTOPIXも検討したが
+     同様に有料プラン限定だった。最終的に、FRED（Federal Reserve Economic Data、
+     既に統合済みかつ無料）が"NIKKEI225"という日経平均株価の系列を提供していることを
+     確認し、`MARKET_REGIME_INDEX_CODE`（FRED series_id）としてこれを使う方式に切り替えた。
+     FREDは終値のみでOHLCが無いため、high=low=close近似で扱う
+     （`_time_series_to_price_series`参照）。取得失敗時は引き続き「レンジ相場」に
+     フォールバックする（クラッシュはさせない）。
   2. 【銘柄スタイルタグの管理場所が未整備】regime_detector.score_fit()・
      macro_evaluator.apply_sector_sensitivity()はいずれも銘柄の`style_tags`
      （growth/defensive/high_dividend等）を要求するが、それを管理するconfigファイルが
@@ -112,12 +107,20 @@ PRICE_LOOKBACK_DAYS = 400  # 200MA計算に必要な200営業日分を安全に�
 MACRO_LOOKBACK_DAYS = 900  # 月次・四半期系列でも十分な点数を確保する
 NEWS_LOOKBACK_DAYS = 2  # 前回runからの差分取得が本来の設計だが、本スクリプトでは簡易に直近48hとする
 
-# ギャップ1（2026-07-24解消）：市場レジーム判定の基準指数。
-# J-Quantsの指数データ（TOPIX含む）は契約中のLightプランでは利用不可（403エラーで確認済み）
-# だったため、既にFRED_API_KEYで無料利用しているFREDの"NIKKEI225"系列（日経平均株価、
-# 日次終値）に切り替えた。トップレベルの指数コード定数は、ログ・エラーメッセージ表示用に
-# そのまま残す（FREDのseries_idとしても使う）。
+# ギャップ1：市場レジーム判定用の指数（2026-07-24、FRED経由に切替。J-Quantsの指数API
+# （/indices/bars/daily）はLight（無料）プランでは403 not availableとなるため、無料で
+# 取得できるFRED（Federal Reserve Economic Data）の"NIKKEI225"系列（Nikkei Stock Average）
+# に切り替えた。FRED系列は終値のみでOHLCが無いため、high=low=close近似で扱う
+# （_time_series_to_price_series参照）。
 MARKET_REGIME_INDEX_CODE = "NIKKEI225"  # FRED series_id（日経平均株価）
+
+# 米ドル円レート（2026-07-24追加、重大バグ修正対応）：position_sizer.pyの為替換算
+# 漏れバグ修正に伴い、米国株の円換算に使う実勢レートが必要になった。FREDの
+# "DEXJPUS"（Japan / U.S. Foreign Exchange Rate）を使う。取得できた場合のみ
+# market_snapshot.jsonの独立したトップレベルフィールド"fx_rates"として出力する
+# （layer2_output.schema.jsonはトップレベルadditionalProperties: trueのため、
+# Layer2の確定スキーマ自体には一切手を加えていない）。
+USD_JPY_FRED_SERIES_ID = "DEXJPUS"  # Japan / U.S. Foreign Exchange Rate
 
 # マクロ系列ID（layer2_analysis.macro_evaluatorの内部キー）→ FRED系列ID
 # （layer1_data_acquisition_design.md §2-3のマッピング表どおり）
@@ -130,14 +133,6 @@ FRED_SERIES_MAP = {
     "gdp_growth": "GDP",
     "leading_index": "USSLIND",
 }
-
-# 2026-07-24追加：米国株のposition_sizer.py新規発注計算に必須の為替レート
-# （円換算漏れで予算の約50倍規模の提案が生成される重大バグが発覚したための対応）。
-# macro_evaluatorのスコアリング対象であるFRED_SERIES_MAPとは意図的に分離し、
-# market_snapshot.jsonの独立したトップレベルフィールド"fx_rates"として出力する
-# （layer2_output.schema.jsonはトップレベルでadditionalProperties: trueのため、
-# 既存スキーマ・macro_evaluatorのスコアリングロジックには一切影響しない追加）。
-USD_JPY_FRED_SERIES_ID = "DEXJPUS"  # Japan / U.S. Foreign Exchange Rate
 
 # ニュース取得(a)：主要指数・マクロ全般の固定クエリ（layer3_news_processing_design.md §4）
 MACRO_NEWS_QUERIES = ["Nikkei 225", "S&P 500", "FOMC", "Bank of Japan", "CPI inflation"]
@@ -328,13 +323,25 @@ def _fetch_macro_series_map(macro_chain, start: date, end: date, warning_errors:
     return series_map
 
 
-def _fetch_usd_jpy_rate(macro_chain, start: date, end: date, warning_errors: list) -> "float | None":
-    """米ドル円レート（直近値）をFRED経由で取得する（2026-07-24追加）。
+def _time_series_to_price_series(series, ticker: str) -> PriceSeries:
+    """FRED由来のTimeSeries（終値のみ）をPriceSeriesへ変換する。
 
-    position_sizer.py（Layer5）が米国株の新規発注の資金管理計算に必須で使う
-    （為替換算漏れの重大バグ修正、jquants側の変更ではなくposition_sizer.py側の
-    修正とセットで導入した）。取得できない場合はNoneを返し、warning_errorsに記録する
-    （非致命：Layer5側でNoneの場合は米国株の新規発注を安全側で見送る設計とする想定）。
+    FREDはOHLCを提供しないため、high=low=close、volume=0として近似する
+    （ADX等の一部テクニカル指標の精度は落ちるが、レジーム判定の目的には十分）。
+    """
+    bars = tuple(
+        PriceBar(date=point.date, open=point.value, high=point.value, low=point.value, close=point.value, volume=0)
+        for point in series.points
+    )
+    meta = DataFetchMeta(source_used="fred", fetched_at=datetime.now(timezone.utc), success=True)
+    return PriceSeries(ticker=ticker, currency="JPY", bars=bars, meta=meta)
+
+
+def _fetch_usd_jpy_rate(macro_chain, start: date, end: date, warning_errors: list) -> "float | None":
+    """米ドル円レート（FRED "DEXJPUS"）を取得する。取得できなければNoneを返す。
+
+    Noneの場合、position_sizer.pyのusd_jpy_rateは必須引数のため、Layer5側で
+    米国株の買付をブロックする（為替換算漏れの重大バグ再発防止、§8参照）。
     """
     try:
         series = macro_chain.call("get_series", USD_JPY_FRED_SERIES_ID, start, end)
@@ -348,6 +355,7 @@ def _fetch_usd_jpy_rate(macro_chain, start: date, end: date, warning_errors: lis
             }
         )
         return None
+
     if not series.points:
         logger.warning("usd_jpy_rate fetch returned no points (%s)", USD_JPY_FRED_SERIES_ID)
         warning_errors.append(
@@ -358,26 +366,8 @@ def _fetch_usd_jpy_rate(macro_chain, start: date, end: date, warning_errors: lis
             }
         )
         return None
-    latest_point = max(series.points, key=lambda p: p.date)
-    return latest_point.value
 
-
-def _time_series_to_price_series(series, ticker: str) -> PriceSeries:
-    """FREDのTimeSeries（日次終値のみ）をPriceSeriesへ変換する（2026-07-24追加）。
-
-    FREDは指数の始値・高値・安値を提供しない（日次終値の1点のみ）。
-    regime_detector.detect_regime()はADX(14)算出のためhigh/lowも参照するが、真の
-    日中値幅が無いため、high=low=close（＝前日終値からの変動のみを見るADX近似）として
-    扱う。トレンド方向（200日線乖離）の判定への影響は無いが、トレンドの「強さ」
-    （ADX）は真のOHLCを使った場合より粗い近似になる点に注意。
-    """
-    bars = tuple(
-        PriceBar(date=point.date, open=point.value, high=point.value, low=point.value,
-                 close=point.value, volume=0)
-        for point in series.points
-    )
-    meta = DataFetchMeta(source_used="fred", fetched_at=datetime.now(timezone.utc), success=True)
-    return PriceSeries(ticker=ticker, currency="JPY", bars=bars, meta=meta)
+    return series.points[-1].value
 
 
 def _fetch_index_series(macro_chain, start: date, end: date, critical_errors: list) -> PriceSeries:
@@ -473,8 +463,9 @@ def main() -> int:
         macro_chain = None
         usd_jpy_rate = None
 
-    # --- 市場レジーム判定用の指数（2026-07-24変更：J-Quantsの指数APIがLightプランでは
-    # 利用不可だったため、マクロ系列と同じFRED経由（macro_chain）で取得するようにした） ---
+    # --- 市場レジーム判定用の指数 -------------------------------------------------
+    # 2026-07-24：J-QuantsのLightプランでは指数API（/indices/bars/daily）が
+    # 403で使えないため、FRED経由（macro_chain）に切り替えた（japan_chainは使わない）。
     if macro_chain is not None:
         index_price_series = _fetch_index_series(macro_chain, price_start, price_end, critical_errors)
     else:
@@ -539,11 +530,10 @@ def main() -> int:
         degraded_sources=sorted(degraded_sources),
     )
 
-    # 2026-07-24追加：米国株の新規発注計算（Layer5 position_sizer.py）に必須の
-    # 為替レートを、既存のLayer2出力スキーマを変更せず追加する（トップレベルで
-    # additionalProperties: trueのため、既存の必須フィールド・スコアリングロジックには
-    # 影響しない）。取得できなかった場合はNoneとし、Layer5側で「米国株の新規発注を
-    # 安全側で見送る」判断に使うことを想定する。
+    # 2026-07-24追加、重大バグ修正対応：position_sizer.pyのusd_jpy_rate必須引数に
+    # 使う実勢レートをmarket_snapshot.jsonへ載せる。layer2_output.schema.jsonは
+    # トップレベルadditionalProperties: trueのため、Layer2の確定スキーマには
+    # 手を加えていない（新規の追加トップレベルキーとして扱われる）。
     layer2_output["fx_rates"] = {"usd_jpy": usd_jpy_rate}
 
     logger.info(

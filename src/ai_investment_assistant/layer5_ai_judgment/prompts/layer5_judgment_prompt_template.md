@@ -154,7 +154,25 @@ API呼び出しは機能しない）。実際のGoogle Driveとの読み書き�
 4. `scripts/rule_enforcer.py` を実行し、信頼度ゲート・1日3件上限をあなたの判断結果に
    機械的に適用する。
 5. `scripts/position_sizer.py` を実行し、最終的に採用された提案の推奨株数・損切/利確
-   価格を確定計算する。
+   価格を確定計算する。このスクリプトにはCLIの`main()`が無いため、Bashツールで
+   Pythonを直接呼び出すこと。例：
+   ```
+   python -c "
+   import json
+   from ai_investment_assistant.layer5_ai_judgment.scripts.position_sizer import allocate_positions
+   candidates = [...]  # あなたが採否・take_profit_target_pct等を確定した候補のリスト
+   usd_jpy_rate = market_snapshot['fx_rates']['usd_jpy']  # market_snapshot.jsonのトップレベルから取得
+   result = allocate_positions(candidates, available_capital=..., total_capital=...,
+                                take_profit_policy=..., usd_jpy_rate=usd_jpy_rate)
+   print(json.dumps(result, ensure_ascii=False))
+   "
+   ```
+   `usd_jpy_rate`は必ず`market_snapshot.json`の`fx_rates.usd_jpy`から取得すること
+   （2026-07-24追加、重大バグ修正対応：以前、米国株の投資可能額判定に円建ての
+   total_capitalをそのまま適用してしまい、想定の約50倍規模の提案が生成される
+   致命的なバグがあった。`fx_rates.usd_jpy`が`null`の場合、`allocate_positions`は
+   `usd_jpy_rate`が必須引数のため呼び出せない。この場合、米国株の新規買い提案は
+   全て見送り・様子見とし、日本株のみ通常どおり処理すること）。
 6. 組み立てた最終decision document（`run_meta`／`proposals`／`decision_log`／
    `rule_enforcement_log`）をJSONファイルとして書き出し、
    `scripts/decision_writer.py <そのファイルパス>` を実行する。ローカルの

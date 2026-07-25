@@ -11,13 +11,14 @@ LLMは「何を買うべきか・なぜか」を判断するが、「いくら�
     投資可能な残余資金 = available_capital（他候補への配分を逐次消費した後の値）
     購入価格（円換算後） = entry_price_basis × fx_rate_to_jpy
     推奨株数(仮) = min(投資上限額 ÷ 購入価格（円換算後）, 残余資金 ÷ 購入価格（円換算後）)
-    日本株: floor(仮/100)×100 に切り下げ。米国株等: floor(仮) に切り下げ。
+    日本株・米国株等いずれも floor(仮) に切り下げ（2026-07-26、単元未満株対応で変更。
+    下記注意2参照）。
     損切価格・利確価格は、entry_price_basis（銘柄本来の取引通貨のまま、円換算しない）
     を基準に算出する（実際の注文は現地取引所の通貨建てで出すため）。
     損切価格 = entry_price_basis × (1 - stop_loss_pct(既定10%))
     利確価格 = entry_price_basis × (1 + take_profit_target_pct/100)（範囲補正後の値を使う）
 
-注意（2026-07-24追加、重大バグ修正）：Layer5の初回実データ接続テストで、米国株
+注意1（2026-07-24追加、重大バグ修正）：Layer5の初回実データ接続テストで、米国株
 （entry_price_basisがUSD建て）の投資可能額判定に、円建てのtotal_capital/
 available_capitalをそのまま割ってしまい、為替換算が一切行われていないことが判明した
 （例：NVDA終値$208.76に対しtotal_capital=250,000円をそのまま適用し、
@@ -27,6 +28,19 @@ available_capitalをそのまま割ってしまい、為替換算が一切行わ
 追加し、資金管理（推奨株数・position_amount）の計算にのみ円換算を適用する。
 これはload_portfolio_state.py（既存ポジションの読み込み）が`為替レート`列を使って
 `invested_amount`を円換算しているのと同じ考え方を、新規発注の計算にも適用したもの。
+
+注意2（2026-07-26追加、日本株の売買単位変更）：以前は日本株を東証の単元株制度に
+倣い100株単位（floor(仮/100)×100）に切り下げていたが、この仕様のもとでは
+config/capital_policy.yamlの資金規模（test_phase: 25万円）に対し、対象ユニバースの
+日本株はいずれも100株購入に必要な最低金額（例：トヨタ自動車=289,700円）が
+1銘柄あたり投資上限（33%）どころかtotal_capital自体を上回り、構造的に一切約定
+できないことが実データで確認された。ユーザーの実際の証券口座（SBI証券）が
+単元未満株サービス「S株」（1株単位の売買）に対応していることを確認したうえで、
+ユーザーの明示判断により、日本株も米国株と同様に1株単位（floor(仮)）で計算する
+方式へ変更した（`_floor_shares`はasset_class分岐を撤廃）。これによりデザインフリーズ
+仕様（§8）の一部を変更しているため、変更経緯をこのdocstringに明記する。
+なお、S株は成行注文のみ・リアルタイム約定ではなく所定時刻の一括約定である点は、
+実際の発注執行方法として別途考慮が必要（本モジュールの計算対象外）。
 """
 
 from __future__ import annotations
@@ -66,10 +80,14 @@ def resolve_take_profit_target_pct(llm_value, policy: dict) -> tuple:
 
 
 def _floor_shares(raw_shares: float, asset_class: str) -> int:
+    """整数株に切り下げる。
+
+    2026-07-26変更：日本株も単元未満株（SBI証券のS株等、1株単位の売買）を使う前提に
+    切り替えたため、asset_classによる分岐は撤廃し、全資産クラスで1株単位に統一した
+    （以前は japan_equity のみ100株単位=floor(仮/100)×100 だった）。
+    """
     if raw_shares <= 0:
         return 0
-    if asset_class == "japan_equity":
-        return int(math.floor(raw_shares / 100.0)) * 100
     return int(math.floor(raw_shares))
 
 
