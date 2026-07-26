@@ -38,7 +38,17 @@ class LookbackPriceCheckRepository(PriceCheckRepository):
 
         today = self._clock()
         start_date = today - timedelta(days=self._lookback_days)
-        series = chain.get_daily_prices(ticker, start_date, today)
+        # 2026-07-26修正（実データ初回検証で発覚）：`chain`は`factory.build_chain(...)`が
+        # 返す`FallbackChainRepository`であり、`get_daily_prices`という直接のメソッドは
+        # 持たない（`call(method_name, *args)`という汎用ディスパッチのみを公開する。
+        # scripts/run_daily_pipeline.pyの`chain.call("get_daily_prices", ticker, start, end)`
+        # と同じ呼び方に合わせる）。従来の`chain.get_daily_prices(...)`という直接呼び出しは
+        # `AttributeError: 'FallbackChainRepository' object has no attribute
+        # 'get_daily_prices'`で必ず失敗する実装ミスだったが、テストのFakeChainが偶然
+        # 同名メソッドを直接生やしていたため単体テストでは検知できなかった
+        # （tests/layer7/test_price_check_repository_impl.pyのFakeChainも実物のインター
+        # フェース（callのみ）に合わせて修正済み）。
+        series = chain.call("get_daily_prices", ticker, start_date, today)
 
         if not series.bars:
             raise ValueError(f"no price bars returned for ticker={ticker}")

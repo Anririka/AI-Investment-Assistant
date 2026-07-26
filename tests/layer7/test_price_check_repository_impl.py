@@ -12,11 +12,22 @@ from ai_investment_assistant.layer7_proposal_tracking.repository.price_check_rep
 
 
 class FakeChain:
+    """実物の`FallbackChainRepository`と同じインターフェース（`call(method_name, *args)`
+    のみを公開し、`get_daily_prices`等の直接メソッドは持たない）を模したフェイク。
+
+    2026-07-26追加：以前のFakeChainは`get_daily_prices`を直接のメソッドとして持って
+    いたため、`LookbackPriceCheckRepository`側の実装ミス（`chain.get_daily_prices(...)`
+    という、実物には存在しない直接呼び出し）を単体テストで検知できなかった
+    （実地検証で`AttributeError`として発覚。price_check_repository_impl.py参照）。
+    """
+
     def __init__(self, bars):
         self._bars = bars
         self.calls = []
 
-    def get_daily_prices(self, ticker, start_date, end_date):
+    def call(self, method_name, *args, **kwargs):
+        assert method_name == "get_daily_prices"
+        ticker, start_date, end_date = args
         self.calls.append((ticker, start_date, end_date))
         return PriceSeries(
             ticker=ticker, currency="USD", bars=tuple(self._bars),
