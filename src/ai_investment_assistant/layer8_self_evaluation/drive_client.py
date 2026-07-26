@@ -120,8 +120,14 @@ class Layer8DriveClient:
         """`sheet_title`を省略した場合は、スプレッドシート内の先頭（唯一）のシートを
         対象に読む（2026-07-26追記。layer7_proposal_tracking/drive_client.pyと同じ
         変更をLayer8側にも適用。理由は同ファイルのdocstring参照）。
+
+        2026-07-26追記（実データ初回検証で発覚）：列範囲`A:Z`（26列まで）では
+        Layer6「本日の提案」シートの29列全ては取得できず、27〜29列目
+        （レジーム適合スコア／総合スコア／代替候補）がAPIレスポンスから欠落する
+        不具合が実際に発生した（`layer7_proposal_tracking/drive_client.py`の
+        同メソッドdocstring参照）。`ZZ`列まで広げて修正した。
         """
-        range_ = f"{sheet_title}!A:Z" if sheet_title else "A:Z"
+        range_ = f"{sheet_title}!A:ZZ" if sheet_title else "A:ZZ"
         result = sheets_service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id, range=range_
         ).execute()

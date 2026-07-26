@@ -133,8 +133,17 @@ class Layer7DriveClient:
         """`sheet_title`を省略した場合は、スプレッドシート内の先頭（唯一）のシートを
         対象に読む（2026-07-26追記：`読取仕様変更`セクション参照。1ファイル1シート
         構成のファイルではタブ名を指定する必要が無い）。
+
+        2026-07-26追記（実データ初回検証で発覚した重大な不具合）：以前は列範囲を
+        `A:Z`（A〜Z列＝26列分）に固定していたが、Layer6「本日の提案」シートは
+        `SHEET_COLUMNS`（candidate_formatter.py）で29列（AC列まで）ある。26列を
+        超える範囲（27列目`レジーム適合スコア`・28列目`総合スコア`・29列目
+        `代替候補`）はAPIレスポンスから静かに欠落し、Layer8側で`score_summary.
+        regime_fit`／`composite`が常にNoneになる不具合として発覚した（値が無いのでは
+        なく、そもそも取得範囲外だった）。将来の列追加にも耐えられるよう、`ZZ`列
+        （702列相当）まで広げた十分な余裕を持たせる。
         """
-        range_ = f"{sheet_title}!A:Z" if sheet_title else "A:Z"
+        range_ = f"{sheet_title}!A:ZZ" if sheet_title else "A:ZZ"
         result = sheets_service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id, range=range_
         ).execute()

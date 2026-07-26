@@ -145,6 +145,42 @@ def test_read_proposal_sheet_rows_uses_the_latest_write_when_rerun_same_day():
     assert rows == [{"run_id": "new"}]
 
 
+class _RangeCapturingSheetsService:
+    """`_read_sheet_values`が実際にSheets APIへ渡すrange文字列を検証するための
+    最小限のフェイク（FakeLayer7DriveClientは`_read_sheet_values`自体を上書きして
+    しまうため、このクラス単体では実装のrange構築ロジックを検証できない）。
+    """
+
+    def __init__(self):
+        self.captured_range = None
+
+    def spreadsheets(self):
+        return self
+
+    def values(self):
+        return self
+
+    def get(self, spreadsheetId, range):  # noqa: A002
+        self.captured_range = range
+        return self
+
+    def execute(self):
+        return {"values": []}
+
+
+def test_read_sheet_values_requests_a_wide_column_range():
+    """2026-07-26追加、回帰テスト：以前は列範囲が`A:Z`（26列まで）に固定されており、
+    Layer6「本日の提案」シートの29列全ては取得できず、27〜29列目
+    （レジーム適合スコア／総合スコア／代替候補）がAPIレスポンスから欠落し、
+    Layer8側でNoneとして記録される不具合が実データで発生した（drive_client.pyの
+    `_read_sheet_values`docstring参照）。26列を超える範囲まで要求することを確認する。
+    """
+    client = Layer7DriveClient(oauth_token_json="{}", root_folder_id="root")
+    service = _RangeCapturingSheetsService()
+    client._read_sheet_values(service, "sheet-id")
+    assert service.captured_range == "A:ZZ"
+
+
 def test_constructor_requires_credentials():
     import pytest
     with pytest.raises(ValueError):

@@ -136,6 +136,39 @@ def test_write_evaluation_json_updates_existing_in_place():
     assert len(matching) == 1
 
 
+class _RangeCapturingSheetsService:
+    """`_read_sheet_values`が実際にSheets APIへ渡すrange文字列を検証するための
+    最小限のフェイク（FakeLayer8DriveClientは`_read_sheet_values`自体を上書きして
+    しまうため、このクラス単体では実装のrange構築ロジックを検証できない）。
+    """
+
+    def __init__(self):
+        self.captured_range = None
+
+    def spreadsheets(self):
+        return self
+
+    def values(self):
+        return self
+
+    def get(self, spreadsheetId, range):  # noqa: A002
+        self.captured_range = range
+        return self
+
+    def execute(self):
+        return {"values": []}
+
+
+def test_read_sheet_values_requests_a_wide_column_range():
+    """2026-07-26追加、回帰テスト：layer7_proposal_tracking/test_drive_client.pyの
+    同名テストと同じ理由（drive_client.pyの`_read_sheet_values`docstring参照）。
+    """
+    client = Layer8DriveClient(oauth_token_json="{}", root_folder_id="root")
+    service = _RangeCapturingSheetsService()
+    client._read_sheet_values(service, "sheet-id")
+    assert service.captured_range == "A:ZZ"
+
+
 def test_constructor_requires_credentials():
     import pytest
     with pytest.raises(ValueError):
