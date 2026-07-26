@@ -25,6 +25,14 @@ us_equity:
       reserved_for: ["earnings_surprise", "final_candidates_detail"]
     - name: twelve_data
       rate_limit_per_day: 800
+      # 2026-07-26追加：Twelve Data公式サイト（twelvedata.com/pricing）で確認したBasic
+      # （無料）プランの実際の上限は「8クレジット/分（800/日）」であり、rate_limit_per_day
+      # だけでは分あたりの実際の制約を表せていなかった（factory.pyはrate_limit_per_minuteが
+      # 設定されているエントリのみRateLimiterを組み込む契約のため、この行が無いと分あたりの
+      # 実制限を一切守らずリクエストを送ってしまい、725銘柄規模の第1段階運用では大半が
+      # 429エラーになる）。get_daily_prices（time_series）は1クレジット/回のため、
+      # 8回/分＝1回あたり7.5秒間隔で呼び出す。
+      rate_limit_per_minute: 8
       role: "primary_bulk_scan"
 
 # 2026-07-26追加：config/universe.yamlをS&P500全構成銘柄（503件）に差し替えたことに伴う
@@ -38,10 +46,15 @@ us_equity:
 # repositories/twelve_data.pyのdocstring参照）のチェーンを別途用意することで、
 # alpha_vantageの予約枠を第2段階（絞り込み後の詳細フェッチ、既存のus_equityチェーンを使用）
 # のために温存する。
+#
+# rate_limit_per_minute: 8（上のus_equityチェーンのtwelve_data候補と同じ理由、Basicプランの
+# 実際の上限）。503銘柄 × 7.5秒間隔 ≈ 63分かかる計算になる（本ファイル最下部の運用上の
+# 注意点、および項目6の会話ログ参照）。
 us_equity_bulk_price:
   chain:
     - name: twelve_data
       rate_limit_per_day: 800
+      rate_limit_per_minute: 8
       role: "primary_bulk_scan"
 
 macro:
