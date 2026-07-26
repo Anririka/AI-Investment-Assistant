@@ -114,9 +114,16 @@ class Layer8DriveClient:
         created = service.files().create(body=metadata, media_body=media, fields="id").execute()
         return created["id"]
 
-    def _read_sheet_values(self, sheets_service: Any, spreadsheet_id: str, sheet_title: str) -> list:
+    def _read_sheet_values(
+        self, sheets_service: Any, spreadsheet_id: str, sheet_title: Optional[str] = None
+    ) -> list:
+        """`sheet_title`を省略した場合は、スプレッドシート内の先頭（唯一）のシートを
+        対象に読む（2026-07-26追記。layer7_proposal_tracking/drive_client.pyと同じ
+        変更をLayer8側にも適用。理由は同ファイルのdocstring参照）。
+        """
+        range_ = f"{sheet_title}!A:Z" if sheet_title else "A:Z"
         result = sheets_service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id, range=f"{sheet_title}!A:Z"
+            spreadsheetId=spreadsheet_id, range=range_
         ).execute()
         return result.get("values", [])
 
@@ -164,18 +171,23 @@ class Layer8DriveClient:
     # --- 公開API：Layer6成果物の読み取り専用参照（§5-2） --------------------------------
 
     def read_proposal_sheet_rows(self, date_str: str, sheet_name: str = "本日の提案") -> Optional[list]:
+        """2026-07-26変更：`提案ログ_{date_str}`という1ファイル内のタブを読む方式から、
+        `提案ログ_{date_str}_{sheet_name}`という単一シートの独立ファイルを読む方式へ
+        変更した。理由は`layer7_proposal_tracking/drive_client.py`の同名メソッドの
+        docstring参照（Layer6の保存方式変更に合わせた対応）。
+        """
         drive_service = self._get_drive_service()
         sheets_service = self._get_sheets_service()
         folder_id = self._get_subfolder_id(drive_service, "reports", create_if_missing=False)
         if folder_id is None:
             return None
 
-        file_name = f"提案ログ_{date_str}"
+        file_name = f"提案ログ_{date_str}_{sheet_name}"
         spreadsheet_id = self._find_latest_file_id(drive_service, file_name, folder_id)
         if spreadsheet_id is None:
             return None
 
-        values = self._read_sheet_values(sheets_service, spreadsheet_id, sheet_name)
+        values = self._read_sheet_values(sheets_service, spreadsheet_id)
         if not values:
             return []
         header, *rows = values

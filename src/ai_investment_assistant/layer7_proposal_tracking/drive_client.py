@@ -127,9 +127,16 @@ class Layer7DriveClient:
         created = service.files().create(body=metadata, media_body=media, fields="id").execute()
         return created["id"]
 
-    def _read_sheet_values(self, sheets_service: Any, spreadsheet_id: str, sheet_title: str) -> list:
+    def _read_sheet_values(
+        self, sheets_service: Any, spreadsheet_id: str, sheet_title: Optional[str] = None
+    ) -> list:
+        """`sheet_title`を省略した場合は、スプレッドシート内の先頭（唯一）のシートを
+        対象に読む（2026-07-26追記：`読取仕様変更`セクション参照。1ファイル1シート
+        構成のファイルではタブ名を指定する必要が無い）。
+        """
+        range_ = f"{sheet_title}!A:Z" if sheet_title else "A:Z"
         result = sheets_service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id, range=f"{sheet_title}!A:Z"
+            spreadsheetId=spreadsheet_id, range=range_
         ).execute()
         return result.get("values", [])
 
@@ -191,9 +198,21 @@ class Layer7DriveClient:
     # --- 公開API：Layer6成果物の読み取り専用参照（§5-1・§5-2） --------------------------
 
     def read_proposal_sheet_rows(self, date_str: str, sheet_name: str = "本日の提案") -> Optional[list]:
-        """reports/提案ログ_{date_str}（Layer6成果物、同日複数存在時はcreatedTime最大）の
-        指定タブを読み取り専用で参照し、{列名: 値}の辞書のリストとして返す。
+        """reports/提案ログ_{date_str}_{sheet_name}（Layer6成果物、同日複数存在時は
+        createdTime最大）を読み取り専用で参照し、{列名: 値}の辞書のリストとして返す。
         見つからない場合はNone（§9：当日の新規取り込みをスキップし次回再試行）。
+
+        読取仕様変更（2026-07-26、実地検証を踏まえた修正）：当初はLayer6が「本日の提案」
+        を含む4タブを`提案ログ_{date_str}`という1つのファイルにまとめて保存する前提
+        だったが、Claude Cowork実行環境（Google Drive MCPコネクタ）でこの1ファイル・
+        複数タブ構成が実現できない（xlsx→Google Sheets自動変換アップロード非対応、かつ
+        base64経由の大きなバイナリ転記でファイル破損が発生することが実地検証で判明）
+        ため、Layer6はタブごとに独立したファイル（`提案ログ_{date_str}_{シート名}`、
+        例：`提案ログ_20260726_本日の提案`）として保存する方式に変更した
+        （layer6_report_generation/local_drive_client.pyモジュールdocstring参照）。
+        これに合わせ、Layer7側の読み込みも「ファイル名にシート名を含めて直接特定し、
+        単一シートとして読む」方式へ変更した（タブ名指定は不要になったため
+        `_read_sheet_values`の`sheet_title`は省略する）。
         """
         drive_service = self._get_drive_service()
         sheets_service = self._get_sheets_service()
@@ -201,12 +220,12 @@ class Layer7DriveClient:
         if folder_id is None:
             return None
 
-        file_name = f"提案ログ_{date_str}"
+        file_name = f"提案ログ_{date_str}_{sheet_name}"
         spreadsheet_id = self._find_latest_file_id(drive_service, file_name, folder_id)
         if spreadsheet_id is None:
             return None
 
-        values = self._read_sheet_values(sheets_service, spreadsheet_id, sheet_name)
+        values = self._read_sheet_values(sheets_service, spreadsheet_id)
         if not values:
             return []
         header, *rows = values

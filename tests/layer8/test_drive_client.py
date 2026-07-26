@@ -67,14 +67,17 @@ class FakeLayer8DriveClient(Layer8DriveClient):
         self.files[(folder_id, name)] = {"id": file_id, "bytes": _json.dumps(content, ensure_ascii=False).encode("utf-8")}
         return file_id
 
-    def add_spreadsheet(self, folder_id, name, sheet_values):
+    def add_spreadsheet(self, folder_id, name, rows):
+        """2026-07-26変更：1ファイル1シート構成になったため、`rows`は
+        [[ヘッダー], [データ行], ...] を直接渡す（タブ名をキーにした辞書ではない）。
+        """
         file_id = self._new_id()
         self.files[(folder_id, name)] = {"id": file_id, "bytes": b""}
-        self.spreadsheet_values[file_id] = sheet_values
+        self.spreadsheet_values[file_id] = rows
         return file_id
 
-    def _read_sheet_values(self, sheets_service, spreadsheet_id, sheet_title):
-        return self.spreadsheet_values.get(spreadsheet_id, {}).get(sheet_title, [])
+    def _read_sheet_values(self, sheets_service, spreadsheet_id, sheet_title=None):
+        return self.spreadsheet_values.get(spreadsheet_id, [])
 
 
 def test_read_closed_positions_returns_none_when_missing():
@@ -105,9 +108,10 @@ def test_read_latest_layer7_completed_flag_returns_content():
 def test_read_proposal_sheet_rows_parses_header_and_rows():
     client = FakeLayer8DriveClient(oauth_token_json="{}", root_folder_id="root")
     client.folders["reports"] = "reports-id"
-    client.add_spreadsheet("reports-id", "提案ログ_20260718", {
-        "本日の提案": [["run_id", "証券コード"], ["20260718-0630", "NVDA"]],
-    })
+    client.add_spreadsheet(
+        "reports-id", "提案ログ_20260718_本日の提案",
+        [["run_id", "証券コード"], ["20260718-0630", "NVDA"]],
+    )
     rows = client.read_proposal_sheet_rows("20260718")
     assert rows == [{"run_id": "20260718-0630", "証券コード": "NVDA"}]
 
