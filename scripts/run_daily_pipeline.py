@@ -90,6 +90,7 @@ from ai_investment_assistant.layer1_data_acquisition.exceptions import DataSourc
 from ai_investment_assistant.layer1_data_acquisition.factory import RepositoryFactory
 from ai_investment_assistant.layer1_data_acquisition.models import DataFetchMeta, PriceBar, PriceSeries
 from ai_investment_assistant.layer2_analysis import main as layer2_main
+from ai_investment_assistant.layer2_analysis import stage1_screener
 from ai_investment_assistant.layer3_news_processing import fetcher as layer3_fetcher
 from ai_investment_assistant.layer3_news_processing import main as layer3_main
 from ai_investment_assistant.layer3_news_processing.structurer_factory import build_structurer
@@ -197,6 +198,42 @@ def _estimate_market_cap(fundamentals, price_series: PriceSeries, ticker: str = 
         )
         return None
     return shares_outstanding * latest_close
+
+
+def _fetch_bulk_prices(
+    chain,
+    tickers: list,
+    asset_class: str,
+    start: date,
+    end: date,
+) -> list:
+    """第1段階（stage1_screener）向けに、価格データのみを母集団全体から取得する。
+
+    2026-07-26追加：config/universe.yamlの725銘柄全体に対して`_fetch_market_candidates`
+    （価格＋ファンダメンタルの2回取得）をそのまま実行すると、米国株側でAlpha Vantageの
+    25回/日制限を広域スクリーニングだけで使い切ってしまう（本ファイル冒頭のコメント、
+    config/api_sources.yamlのus_equity_bulk_priceチェーン参照）。そのため本関数は
+    get_daily_pricesのみを呼び、get_fundamentals・get_listed_universeは呼ばない
+    （銘柄名・時価総額はstage1_screenerでは使わない。流動性フィルタ・テクニカルスコアの
+    いずれも価格データのみで算出できるため）。
+
+    1銘柄の取得失敗は当該銘柄を母集団から静かに除外する（`_fetch_market_candidates`と
+    異なり、excluded_summaryには記録しない。stage1_screener.pyモジュールdocstringの
+    「設計上の判断」参照。ここで失敗する銘柄は「本日は一次スクリーニングの対象にできな
+    かった」というだけであり、Layer6の除外ログで人間がレビューすべき除外理由とは性質が
+    異なるため）。
+    """
+    candidates: list = []
+    for ticker in tickers:
+        try:
+            price_series = chain.call("get_daily_prices", ticker, start, end)
+        except DataSourceError as exc:
+            logger.warning(
+                "stage1 bulk price fetch failed for %s (%s): %s", ticker, asset_class, exc
+            )
+            continue
+        candidates.append({"ticker": ticker, "asset_class": asset_class, "price_series": price_series})
+    return candidates
 
 
 def _fetch_market_candidates(
@@ -420,30 +457,67 @@ def main() -> int:
     price_end = date.today()
     macro_start = date.today() - timedelta(days=MACRO_LOOKBACK_DAYS)
 
-    candidates_raw: list = []
+    # --- 第1段階（広域・価格データのみスクリーニング） ------------------------------
+    # 2026-07-26追加：config/universe.yamlが日経225・S&P500の実銘柄リスト（725銘柄）に
+    # 差し替えられたことに伴い追加（項目6「残作業一覧」対応、layer2_analysis/
+    # stage1_screener.pyのモジュールdocstring参照）。母集団全体を対象に価格データのみで
+    # 一次スクリーニングし、各資産クラスをstage1_shortlist_size件（config/universe.yaml、
+    # 既定20件）に絞り込んでから、従来通りの詳細フェッチ（価格＋ファンダメンタル取得、
+    # 第2段階）に渡す。米国株の第1段階は`us_equity_bulk_price`チェーン（Twelve Data単独）
+    # を使い、Alpha Vantageの25回/日枠を第2段階（最終候補の詳細取得）のために温存する。
+    stage1_candidates: list = []
+    japan_tickers_full = universe_config.get("japan_equity", {}).get("tickers", [])
+    us_tickers_full = universe_config.get("us_equity", {}).get("tickers", [])
 
-    # --- 日本株 ---------------------------------------------------------------
     try:
         japan_chain = factory.build_chain("japan_equity")
-        japan_tickers = universe_config.get("japan_equity", {}).get("tickers", [])
+        stage1_candidates.extend(
+            _fetch_bulk_prices(japan_chain, japan_tickers_full, "japan_equity", price_start, price_end)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("japan_equity chain build failed (stage1)")
+        critical_errors.append({"code": "SNAPSHOT_MISSING", "message": f"japan_equity chain構築に失敗（第1段階）: {exc}", "source_layer": "layer1"})
+        japan_chain = None
+
+    try:
+        us_bulk_chain = factory.build_chain("us_equity_bulk_price")
+        stage1_candidates.extend(
+            _fetch_bulk_prices(us_bulk_chain, us_tickers_full, "us_equity", price_start, price_end)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("us_equity_bulk_price chain build failed (stage1)")
+        critical_errors.append({"code": "SNAPSHOT_MISSING", "message": f"us_equity_bulk_price chain構築に失敗（第1段階）: {exc}", "source_layer": "layer1"})
+
+    stage1_result = stage1_screener.select_shortlist(stage1_candidates, universe_config)
+    logger.info(
+        "stage1 shortlist sizes: %s (excluded counts: %s)",
+        {k: len(v) for k, v in stage1_result["shortlist"].items()},
+        stage1_result["stage1_excluded_count"],
+    )
+
+    candidates_raw: list = []
+
+    # --- 日本株（第2段階：価格＋ファンダメンタルの詳細フェッチ） -----------------------
+    japan_shortlist = stage1_result["shortlist"].get("japan_equity", [])
+    if japan_chain is not None:
         candidates_raw.extend(
             _fetch_market_candidates(
-                japan_chain, japan_tickers, "japan_equity", price_start, price_end,
+                japan_chain, japan_shortlist, "japan_equity", price_start, price_end,
                 warning_errors, excluded_summary, degraded_sources,
             )
         )
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("japan_equity chain build failed")
-        critical_errors.append({"code": "SNAPSHOT_MISSING", "message": f"japan_equity chain構築に失敗: {exc}", "source_layer": "layer1"})
-        japan_chain = None
 
-    # --- 米国株 -----------------------------------------------------------------
+    # --- 米国株（第2段階：価格＋ファンダメンタルの詳細フェッチ） -----------------------
+    # 第1段階（us_equity_bulk_price＝Twelve Data単独）とは別に、こちらは従来通り
+    # us_equityチェーン（Alpha Vantageを先頭候補とする）を使う。絞り込み後の少数銘柄
+    # （既定20件）のみが対象のため、Alpha Vantageの25回/日枠を本来の用途
+    # （最終候補の決算・EPS等の補完）に使うことができる。
+    us_shortlist = stage1_result["shortlist"].get("us_equity", [])
     try:
         us_chain = factory.build_chain("us_equity")
-        us_tickers = universe_config.get("us_equity", {}).get("tickers", [])
         candidates_raw.extend(
             _fetch_market_candidates(
-                us_chain, us_tickers, "us_equity", price_start, price_end,
+                us_chain, us_shortlist, "us_equity", price_start, price_end,
                 warning_errors, excluded_summary, degraded_sources,
             )
         )

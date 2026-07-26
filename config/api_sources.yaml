@@ -27,6 +27,23 @@ us_equity:
       rate_limit_per_day: 800
       role: "primary_bulk_scan"
 
+# 2026-07-26追加：config/universe.yamlをS&P500全構成銘柄（503件）に差し替えたことに伴う
+# 第1段階（広域・価格データのみ）スクリーニング専用チェーン
+# （scripts/run_daily_pipeline.py・layer2_analysis/stage1_screener.py参照）。
+#
+# us_equityチェーンをそのまま使うと、先頭候補のalpha_vantage（25回/日、
+# reserved_for: final_candidates_detailの通り本来は絞り込み後の最終候補用に予約された枠）を
+# 503銘柄の一次スクリーニングだけで即座に使い切ってしまう。twelve_data単独（800回/日、
+# role: primary_bulk_scanの通りそもそも「広範なスクリーニングの主力」として設計されている、
+# repositories/twelve_data.pyのdocstring参照）のチェーンを別途用意することで、
+# alpha_vantageの予約枠を第2段階（絞り込み後の詳細フェッチ、既存のus_equityチェーンを使用）
+# のために温存する。
+us_equity_bulk_price:
+  chain:
+    - name: twelve_data
+      rate_limit_per_day: 800
+      role: "primary_bulk_scan"
+
 macro:
   chain:
     - name: fred
