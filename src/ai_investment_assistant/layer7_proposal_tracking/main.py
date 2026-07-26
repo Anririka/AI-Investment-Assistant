@@ -38,7 +38,13 @@ def run(
     try:
         # --- 手順2：新規取り込み ---------------------------------------------------
         active_positions_doc = drive_client.read_tracking_json("active_positions.json") or {"positions": []}
-        existing_positions = active_positions_doc.get("positions", [])
+        # 2026-07-26追加：過去にGoogle Sheets APIの文字列型のままDriveへ永続化されて
+        # しまったエントリ（position_store.normalize_position_numeric_fields参照）を
+        # 読み込むたびに数値へ補正する。新規取り込み分は既に正しい型のため冪等。
+        existing_positions = [
+            position_store.normalize_position_numeric_fields(p)
+            for p in active_positions_doc.get("positions", [])
+        ]
 
         sheet_rows = drive_client.read_proposal_sheet_rows(date_str)
         skipped_duplicates = []

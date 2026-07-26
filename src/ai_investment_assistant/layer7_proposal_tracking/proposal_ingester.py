@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 from .holding_period_parser import parse_holding_period_days
+from .position_store import normalize_position_numeric_fields
 from .repository.price_check_repository_impl import infer_asset_class
 
 # Layer6詳細設計書§6-3の列構成のうち、Layer7が利用する9列（§5-1）。
@@ -54,7 +55,7 @@ def ingest_new_positions(
         holding_period_raw = row.get("想定保有期間")
         days, parse_status = parse_holding_period_days(holding_period_raw, unit_days, fallback_default_days)
 
-        new_positions.append({
+        new_position = normalize_position_numeric_fields({
             "tracking_id": build_tracking_id(run_id, ticker),
             "run_id": run_id,
             "ticker": ticker,
@@ -74,6 +75,9 @@ def ingest_new_positions(
             "max_unrealized_loss_pct": 0.0,
             "last_checked_at": None,
         })
+        # Google Sheets APIが数値セルも文字列として返すため（position_store.
+        # normalize_position_numeric_fieldsのdocstring参照）、組み立て直後に数値へ補正する。
+        new_positions.append(new_position)
         existing.add(key)
 
     return new_positions, skipped

@@ -18,6 +18,50 @@ def _parse_date(value) -> date:
     return date.fromisoformat(value)
 
 
+# 2026-07-26追加（実データ初回検証で発覚）：Google Sheets APIの`spreadsheets.values.get`
+# はデフォルト（valueRenderOption=FORMATTED_VALUE）で数値セルも表示用文字列（例："2897"）
+# として返すため、修正前のproposal_ingester.pyはこれらのフィールドを文字列のまま
+# active_positions.jsonへ永続化していた実例がある。price_checker.py（entry_priceの
+# 算術演算）・exit_evaluator.py（stop_loss_price/take_profit_priceの比較演算）・
+# build_closed_position（下記、entry_priceの算術演算）はいずれも数値型を前提とするため、
+# `unsupported operand type(s) for -: 'float' and 'str'`のようなTypeErrorになっていた。
+NUMERIC_FLOAT_FIELDS = ("entry_price", "stop_loss_price", "take_profit_price")
+NUMERIC_INT_FIELDS = ("recommended_shares",)
+
+
+def _to_number(value, cast):
+    """値そのもの（例：2897）は変えず、Python上の型表現（文字列→数値）のみを補正する。
+    "値は一切変更しない"原則に対する例外ではなく、表示形式の変換として扱う
+    （Layer6詳細設計書§5-1の「単位変換・丸め処理は表示形式の変換として許容する」と
+    同じ考え方）。
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return cast(value)
+    text = str(value).replace(",", "")
+    # int("28.0")はValueErrorになるため、int変換は必ずfloat経由にする。
+    return cast(float(text)) if cast is int else cast(text)
+
+
+def normalize_position_numeric_fields(position: dict) -> dict:
+    """`entry_price`等の数値フィールドが文字列で永続化されていた場合に数値へ補正する。
+
+    新規取り込み分（proposal_ingester.py、修正済み）は既に正しい型で組み立てられる
+    ため、この関数は実質的に何もしない（冪等）。Google Drive上に既に文字列のまま
+    保存されてしまった過去のエントリを読み込むたびに適用することで、後続処理を
+    安全にする。
+    """
+    updated = dict(position)
+    for field in NUMERIC_FLOAT_FIELDS:
+        if field in updated:
+            updated[field] = _to_number(updated[field], float)
+    for field in NUMERIC_INT_FIELDS:
+        if field in updated:
+            updated[field] = _to_number(updated[field], int)
+    return updated
+
+
 def build_closed_position(
     position: dict,
     exit_price: Optional[float],

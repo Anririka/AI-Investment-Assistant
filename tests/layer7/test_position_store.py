@@ -2,6 +2,7 @@
 
 from ai_investment_assistant.layer7_proposal_tracking.position_store import (
     build_closed_position,
+    normalize_position_numeric_fields,
     remove_position,
     year_month_of,
 )
@@ -44,3 +45,35 @@ def test_remove_position_filters_by_tracking_id():
 
 def test_year_month_of_derives_from_date_string():
     assert year_month_of("2026-07-18") == "202607"
+
+
+def test_normalize_position_numeric_fields_converts_legacy_string_values():
+    """2026-07-26追加、回帰テスト：Google Drive上に文字列型のまま永続化されて
+    しまった過去のエントリ（実データ初回検証で発覚）が、読み込み時に数値へ補正
+    されることを確認する。"""
+    legacy_position = _position(
+        entry_price="2897", stop_loss_price="2607.3", take_profit_price="3244.64",
+        recommended_shares="28",
+    )
+    normalized = normalize_position_numeric_fields(legacy_position)
+    assert normalized["entry_price"] == 2897.0
+    assert isinstance(normalized["entry_price"], float)
+    assert normalized["stop_loss_price"] == 2607.3
+    assert normalized["take_profit_price"] == 3244.64
+    assert normalized["recommended_shares"] == 28
+    assert isinstance(normalized["recommended_shares"], int)
+
+
+def test_normalize_position_numeric_fields_is_idempotent_for_already_numeric_values():
+    position = _position(stop_loss_price=95.0, take_profit_price=120.0)
+    normalized = normalize_position_numeric_fields(position)
+    assert normalized["entry_price"] == 100.0
+    assert normalized["stop_loss_price"] == 95.0
+    assert normalized["take_profit_price"] == 120.0
+    assert normalized["recommended_shares"] == 4
+
+
+def test_normalize_position_numeric_fields_leaves_missing_fields_untouched():
+    position = {"tracking_id": "TRK-A"}
+    normalized = normalize_position_numeric_fields(position)
+    assert normalized == {"tracking_id": "TRK-A"}

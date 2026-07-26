@@ -63,3 +63,25 @@ def test_ingest_new_positions_records_fallback_parse_status():
     new_positions, _ = ingest_new_positions([row], [], UNIT_DAYS, FALLBACK)
     assert new_positions[0]["parse_status"] == "fallback_used"
     assert new_positions[0]["holding_period_days_parsed"] == FALLBACK
+
+
+def test_ingest_new_positions_coerces_string_numeric_fields_from_real_sheets_api_shape():
+    """2026-07-26追加、回帰テスト：Google Sheets APIの`spreadsheets.values.get`は
+    デフォルト（valueRenderOption=FORMATTED_VALUE）では数値セルも表示用の文字列
+    （例："2897"、"3244.64"）として返す。実データ初回検証で、price_checker.py側の
+    算術演算が`unsupported operand type(s) for -: 'float' and 'str'`で失敗する
+    実例が発生した。この行のフィクスチャは、既存の`_sheet_row()`（Pythonの数値型を
+    直接使っており実物のAPI形状と異なっていた）とは異なり、実際のAPIが返す文字列型
+    のまま値を渡し、数値フィールドが正しくfloat/intへ変換されることを検証する。
+    """
+    row = _sheet_row(
+        購入価格目安="333.74", 損切価格="300.37", 利確価格="383.80", 推奨株数="4",
+    )
+    new_positions, _ = ingest_new_positions([row], [], UNIT_DAYS, FALLBACK)
+    position = new_positions[0]
+    assert position["entry_price"] == 333.74
+    assert isinstance(position["entry_price"], float)
+    assert position["stop_loss_price"] == 300.37
+    assert position["take_profit_price"] == 383.80
+    assert position["recommended_shares"] == 4
+    assert isinstance(position["recommended_shares"], int)
