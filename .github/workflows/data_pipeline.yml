@@ -23,10 +23,12 @@ name: Data Pipeline (Layer1-4)
 
 on:
   workflow_dispatch: {}
-  # Phase1以降で実運用スケジュールを確定するまでは手動実行のみとする。
-  # 稼働開始時にscheduleを有効化する（例：毎朝06:00 JST = 21:00 UTC）。
-  # schedule:
-  #   - cron: "0 21 * * *"
+  # 2026-07-26、実データ初回検証（Layer1〜8、GitHub Actions手動実行）完了に伴い有効化。
+  # 毎朝04:30 JST = 19:30 UTC（前日）。Layer5（Cowork「AI投資アシスタント 毎朝の市場
+  # 分析」トリガー、6:30 JST起動）より前に新鮮なmarket_snapshotを用意しておくため、
+  # 2時間の余裕を持たせている。
+  schedule:
+    - cron: "30 19 * * *"
 
 jobs:
   phase0-smoke-test:

@@ -21,10 +21,10 @@ name: Self Evaluation (Layer8)
 
 on:
   workflow_dispatch: {}
-  # 全体テスト完了後、Layer7完了後のタイミングを確定してから有効化する
-  # （例：Layer7の実行完了を見込める時刻、毎営業日 16:00 JST = 07:00 UTC）。
-  # schedule:
-  #   - cron: "0 7 * * 1-5"
+  # 2026-07-26、実データ初回検証（Layer1〜8、GitHub Actions手動実行）完了に伴い有効化。
+  # 毎営業日16:00 JST = 07:00 UTC（Layer7の完了を見込める時刻）。
+  schedule:
+    - cron: "0 7 * * 1-5"
 
 concurrency:
   group: layer8-evaluation

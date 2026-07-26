@@ -24,10 +24,10 @@ name: Proposal Tracking (Layer7)
 
 on:
   workflow_dispatch: {}
-  # 全体テスト完了後、実運用スケジュールを確定してから有効化する（例：毎営業日 15:30 JST
-  # = 06:30 UTC、日本市場の取引終了後）。
-  # schedule:
-  #   - cron: "30 6 * * 1-5"
+  # 2026-07-26、実データ初回検証（Layer1〜8、GitHub Actions手動実行）完了に伴い有効化。
+  # 毎営業日15:30 JST = 06:30 UTC（日本市場の取引終了後）。
+  schedule:
+    - cron: "30 6 * * 1-5"
 
 concurrency:
   group: layer7-tracking
