@@ -58,12 +58,18 @@ def test_resolve_total_capital_uses_full_scale_when_test_phase_disabled():
 
 
 def test_actual_capital_policy_yaml_loads_and_resolves_to_test_phase_amount():
-    # 実際のconfig/capital_policy.yamlがYAMLとして正しく読め、かつplanned_start_date/
-    # planned_end_dateがnullのままでもresolve_total_capital()が問題なく動作すること
-    # （テスト期間開始日がまだ確定していない現時点での状態）を確認する。
+    # 実際のconfig/capital_policy.yamlがYAMLとして正しく読め、resolve_total_capital()が
+    # 問題なく動作することを確認する。
+    #
+    # 2026-07-26追記：Layer5〜Layer7の実データ初回検証が実際に成功したことを受け、
+    # planned_start_date/planned_end_dateはnullから実際の日付（"2026-07-26"／
+    # "2026-08-25"）へ人手で更新された（config/capital_policy.yaml参照）。
+    # resolve_total_capital()はこれらの日付を一切参照しない設計のため
+    # （test_resolve_total_capital_ignores_planned_dates_even_if_period_has_elapsed
+    # 参照）、値がnullか実日付かに関わらずtest_phaseの金額を返すことに変わりはない。
     policy = load_capital_policy()
-    assert policy["test_phase"]["planned_start_date"] is None
-    assert policy["test_phase"]["planned_end_date"] is None
+    assert policy["test_phase"]["planned_start_date"] == "2026-07-26"
+    assert policy["test_phase"]["planned_end_date"] == "2026-08-25"
     assert resolve_total_capital(policy) == 250000
 
 

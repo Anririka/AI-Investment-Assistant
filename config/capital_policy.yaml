@@ -22,11 +22,13 @@
 # しない（=期限が来ても自動的にfalseへは切り替わらない）。上限の解除・金額変更・
 # 期間の延長は、必ず人間がenabled／total_capitalを直接編集して判断する。
 #
-# planned_start_date／planned_end_dateは、Layer5の実運用テストがまだ開始されていない
-# 時点（本ファイル新設時点）では確定できないため、あえて null のままにしてある。
-# 実際にLayer5の実運用テストを開始した時点で、その開始日をplanned_start_dateに、
-# その30日後をplanned_end_dateに、人手で記入すること（このタイミングでのリマインドは
-# Claude側の標準リマインド事項として引き継ぐ）。
+# planned_start_date／planned_end_date（2026-07-26追記）：
+# 2026-07-26、Layer5〜Layer7の実データ初回検証（Google Driveコネクタ経由での接続・
+# 提案生成・提案トラッキング）が実際に成功したことをもって、Layer5の実運用テスト
+# 開始日と確定し、以下に記入した。前述の通りresolve_total_capital()はこれらの日付を
+# 一切参照しないため、この記入自体が自動的な期限管理をもたらすものではない
+# （期間終了後の恒久値への移行判断は、必ず人間がenabled／total_capitalを直接編集して
+# 行うこと）。
 full_scale:
   total_capital: 3000000
 
@@ -34,8 +36,8 @@ test_phase:
   enabled: true
   total_capital: 250000
   planned_duration_days: 30
-  planned_start_date: null   # Layer5の実運用テストを開始した日に人手で記入
-  planned_end_date: null     # 上記開始日から30日後の日付を人手で記入
+  planned_start_date: "2026-07-26"
+  planned_end_date: "2026-08-25"    # planned_start_dateの30日後（目安・記録用）
   note: >
     初期信頼検証期間中のユーザー指定上限（2026-07確定、期間は最初の1か月を想定）。
     全額運用（300万円）へ移行する際、または期間を延長・短縮する際は、この
