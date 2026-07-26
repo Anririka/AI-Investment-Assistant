@@ -41,3 +41,25 @@ def test_find_score_context_returns_none_when_sheet_rows_is_none():
 
 def test_find_score_context_returns_none_when_sheet_rows_empty():
     assert find_score_context([], "NVDA") is None
+
+
+def test_find_score_context_coerces_string_scores_from_real_sheets_api_shape():
+    """2026-07-26追加、回帰テスト：Google Sheets APIの`spreadsheets.values.get`は
+    デフォルト（valueRenderOption=FORMATTED_VALUE）で数値セルも表示用の文字列
+    （例："79"）として返す。実データ初回検証で、segment_analyzer.score_band()の
+    比較演算が`'<' not supported between instances of 'str' and 'int'`で失敗する
+    実例が発生した。既存の`_sheet_row()`（Pythonの数値型を直接使っており実物のAPI
+    形状と異なっていた）とは異なり、実際のAPIが返す文字列型のまま値を渡し、
+    score_summaryの各軸が正しくfloatへ変換されることを検証する。
+    """
+    row = _sheet_row(
+        テクニカルスコア="84", ファンダメンタルスコア="71", 需給スコア="78",
+        マクロスコア="65", ニューススコア="63", ニュース不確実性="35",
+        レジーム適合スコア="90", 総合スコア="79.5",
+    )
+    context = find_score_context([row], "NVDA")
+    score_summary = context["score_summary"]
+    assert score_summary["composite"] == 79.5
+    assert isinstance(score_summary["composite"], float)
+    assert score_summary["technical"] == 84.0
+    assert isinstance(score_summary["technical"], float)

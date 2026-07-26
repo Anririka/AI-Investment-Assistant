@@ -15,6 +15,25 @@ def derive_sheet_date(run_id: str) -> str:
     return run_id[:8]
 
 
+def _to_float(value):
+    """Google Sheets API（`spreadsheets.values.get`のデフォルトvalueRenderOption=
+    FORMATTED_VALUE）は、数値セルであっても表示用の文字列（例："60.36"）として値を
+    返す。segment_analyzer.score_band()はscore_summaryの各軸を数値として比較演算
+    （`score < 60`等）に使うため、文字列のまま転記すると
+    `'<' not supported between instances of 'str' and 'int'`のようなTypeErrorになる
+    （2026-07-26、実データ初回検証で発覚。layer7_proposal_tracking/position_store.py
+    のnormalize_position_numeric_fieldsと同種のバグ・同じ考え方の修正）。
+
+    値そのもの（例：60.36）は変えず、Python上の型表現（文字列→数値）のみを補正する
+    表示形式の変換として扱う。
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return float(str(value).replace(",", ""))
+
+
 def find_score_context(sheet_rows: Optional[list], ticker: str) -> Optional[dict]:
     """`sheet_rows`（Layer6「本日の提案」シートの行、§6-3の列名のままの辞書リスト）から
     `ticker`に一致する行を検索し、Layer8が必要とするフィールドのみを抽出する。
@@ -28,14 +47,14 @@ def find_score_context(sheet_rows: Optional[list], ticker: str) -> Optional[dict
         if row.get("証券コード") == ticker:
             return {
                 "score_summary": {
-                    "technical": row.get("テクニカルスコア"),
-                    "fundamental": row.get("ファンダメンタルスコア"),
-                    "supply_demand": row.get("需給スコア"),
-                    "macro": row.get("マクロスコア"),
-                    "news_score": row.get("ニューススコア"),
-                    "news_uncertainty": row.get("ニュース不確実性"),
-                    "regime_fit": row.get("レジーム適合スコア"),
-                    "composite": row.get("総合スコア"),
+                    "technical": _to_float(row.get("テクニカルスコア")),
+                    "fundamental": _to_float(row.get("ファンダメンタルスコア")),
+                    "supply_demand": _to_float(row.get("需給スコア")),
+                    "macro": _to_float(row.get("マクロスコア")),
+                    "news_score": _to_float(row.get("ニューススコア")),
+                    "news_uncertainty": _to_float(row.get("ニュース不確実性")),
+                    "regime_fit": _to_float(row.get("レジーム適合スコア")),
+                    "composite": _to_float(row.get("総合スコア")),
                 },
                 "investment_reason": row.get("投資理由"),
                 "risk_factors": row.get("リスク要因"),
