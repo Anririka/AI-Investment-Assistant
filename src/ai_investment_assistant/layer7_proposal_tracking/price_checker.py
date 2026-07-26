@@ -8,8 +8,11 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Callable, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def update_position_price(position: dict, repository, now: Callable[[], datetime] = None) -> Tuple[dict, bool]:
@@ -17,11 +20,20 @@ def update_position_price(position: dict, repository, now: Callable[[], datetime
 
     取得失敗時は例外を送出せず、position を変更せずそのまま返す（§9：既存の`active`状態を
     維持し、次回実行時に再試行するため）。
+
+    2026-07-26追加：失敗時にwarningログを出す（挙動自体は変更しない）。以前は例外を
+    完全に握りつぶしており、GitHub Actionsのログから原因（認証エラーか、ティッカー
+    形式不一致か、レート制限か等）を判別できなかったため、実地検証で判明した
+    診断性の欠如を修正した。
     """
     now = now or (lambda: datetime.now(timezone.utc))
     try:
         snapshot = repository.get_latest_price(position["ticker"], position.get("asset_class"))
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "price fetch failed for ticker=%s asset_class=%s: %s",
+            position.get("ticker"), position.get("asset_class"), exc,
+        )
         return position, False
 
     entry_price = position["entry_price"]
