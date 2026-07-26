@@ -28,6 +28,19 @@ def test_build_report_index_entry_from_presentation_model_uses_top_ranked_propos
     assert entry["date"] == "20260718"
 
 
+def test_build_report_index_entry_from_presentation_model_uses_jst_date_across_day_boundary():
+    """2026-07-26追加、回帰テスト：Layer6の実データ初回検証で、UTC 15:00〜23:59
+    （JST側は既に翌日）に完了した場合、以前のコードは`layer5_completed_at`のUTC日付を
+    そのまま切り出していたため、ファイル名（`report_YYYYMMDD.md`等、JST基準・§6-2）の
+    日付と1日ずれていた。`execution_date_jst`で統一し、ズレないことを確認する
+    （Layer4・Layer5で過去に発覚したのと同種のJST/UTC不整合の再発防止）。
+    """
+    model = build_presentation_model(sample_decision_document())
+    model["run_meta"]["layer5_completed_at"] = "2026-07-25T23:09:35Z"  # JST では 2026-07-26 08:09
+    entry = build_report_index_entry_from_presentation_model(model, sheet_file="reports/提案ログ_20260726")
+    assert entry["date"] == "20260726"
+
+
 def test_build_report_index_entry_from_presentation_model_handles_zero_proposals():
     model = build_presentation_model(sample_decision_document(gate="blocked"))
     entry = build_report_index_entry_from_presentation_model(model, sheet_file=None)

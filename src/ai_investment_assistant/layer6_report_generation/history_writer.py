@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .datetime_util import execution_date_jst
+
 
 def build_report_index_entry(
     date_str: str,
@@ -35,13 +37,20 @@ def build_report_index_entry_from_presentation_model(presentation_model: dict, s
     """PresentationModel（rank昇順に整列済み）から履歴インデックスの1エントリを組み立てる。
 
     `proposals`は既にrank昇順のため、先頭要素がtop_ticker／top_composite_scoreとなる。
+
+    2026-07-26修正（Layer6実データ初回検証で発覚）：以前は`date_str`を
+    `layer5_completed_at`（UTC）の日付部分をそのまま切り出して算出していたが、
+    ファイル名（`report_YYYYMMDD.md`・`提案ログ_YYYYMMDD`）はJST基準（§6-2・§7-3）の
+    ため、UTC 15:00〜23:59（JST側は既に翌日）に実行された場合、インデックスの`date`が
+    実際のファイル名の日付と1日ずれる不整合があった（Layer4・Layer5で過去に発覚したのと
+    同種のJST/UTC不整合。§6-2参照）。`execution_date_jst`で統一する。
     """
     run_meta = presentation_model["run_meta"]
     proposals = presentation_model.get("proposals", [])
     top = proposals[0] if proposals else None
 
     return build_report_index_entry(
-        date_str=run_meta.get("layer5_completed_at", "")[:10].replace("-", ""),
+        date_str=execution_date_jst(run_meta),
         run_id=run_meta.get("run_id"),
         sheet_file=sheet_file,
         proposal_count=len(proposals),
