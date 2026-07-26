@@ -6,10 +6,15 @@
 # 取引終了後）でGitHub Actions上で稼働する（§1）。Layer1〜4のパイプライン（data_pipeline.yml）
 # とは別ファイルに分離しているのはこのため。
 #
-# 現時点ではユニットテストのみを自動実行する。Layer7の実際の実行ステップ（Google Drive
-# 上のtracking/*.json・Layer6が保存したGoogle Sheetsへの実アクセス）は、全体テスト完了後に
-# secrets設定を確認したうえでここへ追加する（data_pipeline.ymlのLayer1〜4本番ステップと
-# 同じ方針）。
+# 2026-07-26追加：Layer7の実際の実行ステップ（Google Drive上のtracking/*.json・Layer6が
+# 保存したGoogle Sheetsへの実アクセス）を`scripts/run_layer7_tracking.py`として追加した
+# （data_pipeline.ymlの`scripts/run_daily_pipeline.py`と同じ構成方針）。価格取得は
+# Layer1の`RepositoryFactory`（japan_equity／us_equityチェーン）をそのまま再利用するため、
+# 新規のAPIキー・secretsは不要で、data_pipeline.ymlと同じsecretsをそのまま使う。
+#
+# 同日、Layer6の保存方式が「1ファイル・4タブ」から「タブごとに独立したファイル
+# （`提案ログ_YYYYMMDD_{シート名}`）」に変更されたことに合わせ、Layer7側の読み込み
+# ロジック（drive_client.pyのread_proposal_sheet_rows）も対応済み。
 #
 # concurrency設定：tracking/配下の各JSONファイルはread-modify-write方式で更新するため、
 # 同一実行単位が重複起動しないことを前提とする（§6-6）。同一ブランチでの重複実行を
@@ -29,7 +34,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  unit-tests:
+  tracking:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,3 +50,15 @@ jobs:
 
       - name: Run unit tests (Layer7)
         run: pytest tests/layer7 -v
+
+      - name: Run Layer7 tracking pipeline (real Google Drive/Sheets + price APIs)
+        # 1銘柄の価格取得失敗は`failed_price_tickers`に記録して継続する設計だが
+        # （layer7_proposal_tracking_design.md §7）、Google Driveへの保存自体（tracking/*.json・
+        # 完了フラグ）が失敗した場合はジョブを失敗させ、異常に気づけるようにする。
+        env:
+          GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+          JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+          ALPHA_VANTAGE_API_KEY: ${{ secrets.ALPHA_VANTAGE_API_KEY }}
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+        run: python scripts/run_layer7_tracking.py
