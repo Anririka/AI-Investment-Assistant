@@ -1,0 +1,64 @@
+# Google Drive「AI投資アシスタント」フォルダ全体を月次でバックアップするパイプライン
+# （項目7「残作業一覧」対応）。
+#
+# 実行内容：`scripts/run_monthly_backup.py`がGoogle Driveフォルダ配下を再帰的に走査し、
+# 実行時点の完全なスナップショットをZip化する（差分ではなく毎回フルバックアップ）。
+# 続けて`gh release create`で、そのZipをGitHub Releasesのアセットとしてアップロードする
+# （GitHub API呼び出しをPython側で再実装せず、Actionsランナーにプリインストール済みの
+# `gh` CLIへ委譲する。scripts/run_monthly_backup.pyのモジュールdocstring参照）。
+#
+# 既存のdata_pipeline.yml等と同じGOOGLE_OAUTH_TOKEN_JSON／GOOGLE_DRIVE_FOLDER_IDの
+# secretsをそのまま使うため、新規secretsの追加は不要。GitHub Releasesの作成には
+# 標準のGITHUB_TOKENで足りるが、デフォルトの読み取り専用スコープではReleaseを
+# 作成できないため、`permissions: contents: write`を明示する。
+#
+# 実行タイミング：毎月1日12:00 JST（＝3:00 UTC）。他の毎日のパイプライン
+# （4:00／4:30／6:30／15:30／16:00 JST）と時間帯が重ならない、日中の分かりやすい時刻を選んだ。
+
+name: Monthly Backup
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: monthly-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests (backup script)
+        run: pytest tests/scripts -v
+
+      - name: Build Google Drive backup zip
+        id: backup
+        env:
+          GOOGLE_OAUTH_TOKEN_JSON: ${{ secrets.GOOGLE_OAUTH_TOKEN_JSON }}
+          GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+        run: python scripts/run_monthly_backup.py
+
+      - name: Upload backup zip to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.backup.outputs.backup_tag }}" \
+            "${{ steps.backup.outputs.backup_zip_path }}" \
+            --title "AI投資アシスタント 月次バックアップ ${{ steps.backup.outputs.backup_tag }}" \
+            --notes "Google Driveフォルダの${{ steps.backup.outputs.backup_tag }}時点でのフルバックアップ（自動生成）。"
