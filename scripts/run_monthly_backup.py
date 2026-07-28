@@ -69,9 +69,18 @@ class DriveBackupCollector:
 
         from ai_investment_assistant.common.google_oauth_auth import build_oauth_credentials
 
+        # 2026-07-28追加（実データ初回検証で発覚した回帰）：drive.readonlyスコープを
+        # 指定していたところ、既存のGOOGLE_OAUTH_TOKEN_JSON（scripts/generate_google_oauth_token.py
+        # で発行済みのリフレッシュトークン）が同意した範囲に含まれておらず、
+        # `invalid_scope: Bad Request`でトークンのリフレッシュ自体が失敗した。OAuthの
+        # リフレッシュトークンは、最初の同意画面で許可されたスコープの範囲内でしか
+        # アクセストークンを再発行できない仕様のため、意味的に「読み取り専用でより狭い」
+        # スコープであっても、元の同意に無い文字列を新たに要求すると失敗する。
+        # Layer1（caching.py）・Layer4（google_drive_repository.py）と同じ
+        # "https://www.googleapis.com/auth/drive"（フルスコープ、既に同意済み）に統一する。
         credentials = build_oauth_credentials(
             self._oauth_token_json,
-            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+            scopes=["https://www.googleapis.com/auth/drive"],
         )
         return build("drive", "v3", credentials=credentials)
 
