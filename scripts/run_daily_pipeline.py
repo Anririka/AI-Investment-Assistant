@@ -78,8 +78,10 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -200,12 +202,17 @@ def _estimate_market_cap(fundamentals, price_series: PriceSeries, ticker: str = 
     return shares_outstanding * latest_close
 
 
+BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES = 5
+BULK_FETCH_COOLDOWN_SECONDS = 60.0
+
+
 def _fetch_bulk_prices(
     chain,
     tickers: list,
     asset_class: str,
     start: date,
     end: date,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> list:
     """第1段階（stage1_screener）向けに、価格データのみを母集団全体から取得する。
 
@@ -222,8 +229,22 @@ def _fetch_bulk_prices(
     「設計上の判断」参照。ここで失敗する銘柄は「本日は一次スクリーニングの対象にできな
     かった」というだけであり、Layer6の除外ログで人間がレビューすべき除外理由とは性質が
     異なるため）。
+
+    2026-07-29追加（クールダウン、実データで発覚した回帰対応）：J-Quants側で、
+    config/api_sources.yamlの設定通り60回/分のペーシングを正しく守っているにも
+    関わらず、ある時点（実行日によって異なる、7/28は102銘柄目・7/29は75銘柄目）
+    から残り全銘柄が継続的にレート制限エラーになる現象が実データで2日連続確認された。
+    閾値が実行日によって変動することから、単純な固定の上限超過ではなく、短時間の
+    連続アクセスに対するサーバー側の一時的な絞り込み（バースト制限やその時点の
+    サーバー負荷等）の可能性が高いと考え、根本原因が確定するまでの暫定対策として、
+    連続`BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES`回失敗した時点で
+    `BULK_FETCH_COOLDOWN_SECONDS`秒だけ一時停止してから再開するクールダウンを
+    1回だけ試みる（1回のみに限定するのは、クールダウンで回復しない場合に何度も
+    無駄な待機を繰り返して全体の実行時間が際限なく伸びるのを避けるため）。
     """
     candidates: list = []
+    consecutive_failures = 0
+    cooldown_used = False
     for ticker in tickers:
         try:
             price_series = chain.call("get_daily_prices", ticker, start, end)
@@ -231,7 +252,21 @@ def _fetch_bulk_prices(
             logger.warning(
                 "stage1 bulk price fetch failed for %s (%s): %s", ticker, asset_class, exc
             )
+            consecutive_failures += 1
+            if (
+                not cooldown_used
+                and consecutive_failures >= BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES
+            ):
+                logger.warning(
+                    "stage1 bulk price fetch (%s): %d consecutive failures, "
+                    "cooling down for %.0f seconds before resuming",
+                    asset_class, consecutive_failures, BULK_FETCH_COOLDOWN_SECONDS,
+                )
+                sleep(BULK_FETCH_COOLDOWN_SECONDS)
+                cooldown_used = True
+                consecutive_failures = 0
             continue
+        consecutive_failures = 0
         candidates.append({"ticker": ticker, "asset_class": asset_class, "price_series": price_series})
     return candidates
 
