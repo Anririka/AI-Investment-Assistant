@@ -50,6 +50,14 @@ us_equity:
 # rate_limit_per_minute: 8（上のus_equityチェーンのtwelve_data候補と同じ理由、Basicプランの
 # 実際の上限）。503銘柄 × 7.5秒間隔 ≈ 63分かかる計算になる（本ファイル最下部の運用上の
 # 注意点、および項目6の会話ログ参照）。
+#
+# 2026-07-31追加：Layer7（提案トラッキング層、毎営業日15:30 JST）の保有銘柄の価格チェック
+# （LookbackPriceCheckRepository、layer7_proposal_tracking/repository/price_check_repository_impl.py）
+# もこのチェーンを使う。Layer7は価格のみ必要でファンダメンタルズは取得しないため、
+# 本来alpha_vantageを経由する理由が無いにもかかわらず、以前は誤ってus_equityチェーン
+# （先頭候補alpha_vantage）を使っており、Layer2第2段階用に予約したはずの25回/日枠を
+# 気づかないうちに消費していた（実データで発覚、翌朝のLayer2第2段階が最初の1件から
+# 失敗する症状として現れた）。
 us_equity_bulk_price:
   chain:
     - name: twelve_data

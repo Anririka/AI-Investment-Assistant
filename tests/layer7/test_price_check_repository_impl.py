@@ -69,3 +69,29 @@ def test_infer_asset_class_numeric_ticker_is_japan_equity():
 
 def test_infer_asset_class_alpha_ticker_is_us_equity():
     assert infer_asset_class("NVDA") == "us_equity"
+
+
+class FakeFactory:
+    """`RepositoryFactory.build_chain(data_type)`呼び出しを記録するフェイク。"""
+
+    def __init__(self):
+        self.requested_data_types = []
+
+    def build_chain(self, data_type):
+        self.requested_data_types.append(data_type)
+        return f"chain-for-{data_type}"
+
+
+def test_from_repository_factory_uses_us_equity_bulk_price_not_us_equity():
+    # 2026-07-31追加（実運用ログ調査で発覚）：Layer7は価格のみ必要でファンダメンタルズは
+    # 取得しないにもかかわらず、以前はus_equityチェーン（先頭候補alpha_vantage、
+    # Layer2第2段階用に予約された25回/日枠）を使っており、毎営業日15:30 JSTの保有銘柄
+    # チェックのたびにこの枠を気づかないうちに消費していた。twelve_dataのみの
+    # us_equity_bulk_priceチェーンを使うよう修正したことを検証する。
+    factory = FakeFactory()
+
+    repo = LookbackPriceCheckRepository.from_repository_factory(factory)
+
+    assert factory.requested_data_types == ["japan_equity", "us_equity_bulk_price"]
+    assert repo._chains["us_equity"] == "chain-for-us_equity_bulk_price"
+    assert repo._chains["japan_equity"] == "chain-for-japan_equity"

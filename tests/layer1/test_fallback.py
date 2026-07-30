@@ -111,6 +111,23 @@ def test_all_candidates_failing_raises_all_sources_failed_error():
     assert len(exc_info.value.errors) == 2
 
 
+def test_rate_limit_log_includes_exception_message_for_diagnosis(caplog):
+    # 2026-07-31追加：以前は例外メッセージをログに出しておらず、Alpha Vantageの
+    # 「本日分の25回上限到達」なのか別の理由なのかを事後にログから判別できなかった
+    # （実運用ログ調査で発覚）。原因調査のため、メッセージ本文がログに含まれることを検証する。
+    first = FakeRepo([RateLimitError("Note: Thank you for using Alpha Vantage! ... 25 requests per day")])
+    second = FakeRepo(["ok-from-second"])
+    chain = FallbackChainRepository(
+        [ChainCandidate("first", first), ChainCandidate("second", second)],
+        sleep=_no_sleep,
+    )
+
+    with caplog.at_level("WARNING"):
+        chain.call("get_daily_prices", "7203")
+
+    assert "25 requests per day" in caplog.text
+
+
 def test_last_source_used_reflects_the_candidate_that_succeeded():
     first = FakeRepo([RateLimitError("429")])
     second = FakeRepo(["ok-from-second"])

@@ -76,8 +76,15 @@ class FallbackChainRepository:
                     # データ不存在は次候補でも存在しない可能性が高いためフォールバックしない（5-1）
                     raise
                 except RateLimitError as exc:
+                    # 2026-07-31追加（実運用ログ調査で発覚）：以前は例外メッセージを
+                    # ログに出していなかったため、Alpha Vantageの「本日分の25回上限に
+                    # 到達」なのか、それ以外の理由（HTTP 429の生レスポンス等）なのかを
+                    # 事後にログから判別できなかった。次回以降の原因調査のため、
+                    # AuthError・TransientErrorのログと同様に例外メッセージ自体を含める。
                     logger.warning(
-                        "rate limit on source=%s, switching to next candidate", candidate.name
+                        "rate limit on source=%s, switching to next candidate: %s",
+                        candidate.name,
+                        exc,
                     )
                     errors.append(exc)
                     break
