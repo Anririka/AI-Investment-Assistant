@@ -280,9 +280,27 @@ def _fetch_market_candidates(
     warning_errors: list,
     excluded_summary: list,
     degraded_sources: set,
+    price_chain=None,
 ) -> list:
-    """1市場分の候補データを取得する。1銘柄の失敗は当該銘柄のみ除外して継続する。"""
+    """1市場分の候補データを取得する。1銘柄の失敗は当該銘柄のみ除外して継続する。
+
+    `price_chain`（2026-08-02追加）：`get_daily_prices`専用に別チェーンを使いたい場合に
+    指定する。省略時（None）は従来通り`chain`を価格取得にも使う（japan_equity等、
+    分離不要な資産クラス向けの後方互換）。
+
+    米国株向けの背景：`chain`（us_equityチェーン、alpha_vantageが先頭候補）の
+    `get_daily_prices`は、無料/Basicプランでは`outputsize=full`パラメータが
+    使えないため常に失敗する実装上のバグがあった（実運用ログで判明、
+    `layer1_data_acquisition/repositories/alpha_vantage.py`のTIME_SERIES_DAILY
+    呼び出し参照）。結果的にTwelve Dataへ毎回フォールバックしており実害は
+    無かったが、20銘柄分の無駄な待ち時間（約8分/run）が発生していた。
+    米国株の呼び出し元では`price_chain=us_equity_bulk_price`チェーン
+    （Twelve Data単独）を渡すことで、この無駄な待ち時間を無くしつつ、
+    `chain`（us_equity、alpha_vantage先頭）はget_fundamentals専用として
+    予約枠を守る。
+    """
     candidates: list = []
+    effective_price_chain = price_chain if price_chain is not None else chain
 
     try:
         listed_universe = list(chain.call("get_listed_universe"))
@@ -322,9 +340,9 @@ def _fetch_market_candidates(
 
     for ticker in tickers:
         try:
-            price_series = chain.call("get_daily_prices", ticker, start, end)
+            price_series = effective_price_chain.call("get_daily_prices", ticker, start, end)
             if price_series.meta.is_delayed:
-                degraded_sources.add(f"{chain.last_source_used}:price_delayed")
+                degraded_sources.add(f"{effective_price_chain.last_source_used}:price_delayed")
 
             fundamentals = chain.call("get_fundamentals", ticker)
 
@@ -543,17 +561,28 @@ def main() -> int:
         )
 
     # --- 米国株（第2段階：価格＋ファンダメンタルの詳細フェッチ） -----------------------
-    # 第1段階（us_equity_bulk_price＝Twelve Data単独）とは別に、こちらは従来通り
-    # us_equityチェーン（Alpha Vantageを先頭候補とする）を使う。絞り込み後の少数銘柄
-    # （既定20件）のみが対象のため、Alpha Vantageの25回/日枠を本来の用途
+    # 第1段階（us_equity_bulk_price＝Twelve Data単独）とは別に、ファンダメンタル取得は
+    # 従来通りus_equityチェーン（Alpha Vantageを先頭候補とする）を使う。絞り込み後の
+    # 少数銘柄（既定20件）のみが対象のため、Alpha Vantageの25回/日枠を本来の用途
     # （最終候補の決算・EPS等の補完）に使うことができる。
+    #
+    # 2026-08-02追加：価格取得（get_daily_prices）だけは、第1段階と同じ
+    # us_equity_bulk_price（Twelve Data単独）チェーンを使う。us_equityチェーンの
+    # 先頭候補alpha_vantageのget_daily_prices実装は、無料/Basicプランでは
+    # outputsize=fullパラメータが使えず常に失敗する（実運用ログで判明、
+    # _fetch_market_candidatesのdocstring参照）。結果的に常にTwelve Dataへ
+    # フォールバックしており実際に使われるデータは元々変わらないが、20銘柄分の
+    # 無駄な待ち時間（約8分/run）を無くし、alpha_vantageの25回/日枠を
+    # get_fundamentals専用として明確に分離する。
     us_shortlist = stage1_result["shortlist"].get("us_equity", [])
     try:
         us_chain = factory.build_chain("us_equity")
+        us_price_chain = factory.build_chain("us_equity_bulk_price")
         candidates_raw.extend(
             _fetch_market_candidates(
                 us_chain, us_shortlist, "us_equity", price_start, price_end,
                 warning_errors, excluded_summary, degraded_sources,
+                price_chain=us_price_chain,
             )
         )
     except Exception as exc:  # noqa: BLE001
