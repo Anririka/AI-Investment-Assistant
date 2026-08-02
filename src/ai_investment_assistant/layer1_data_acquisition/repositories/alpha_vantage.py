@@ -104,11 +104,31 @@ class AlphaVantageRepository(MarketDataRepository):
             except ValueError:
                 return None
 
+        # 2026-08-03修正（実運用ログ調査で発覚）：以前は`net_assets`にOVERVIEWの`BookValue`を
+        # そのまま入れていたが、`BookValue`は「1株あたり純資産」であり、
+        # `FundamentalSnapshot.net_assets`の契約（総純資産・自己資本の総額、他ソース
+        # （jquants/twelve_data）と同じ意味）とは単位が異なっていた。層2側のPBR計算
+        # （market_cap ÷ net_assets、layer2_analysis/main.py）は総額同士の比を想定して
+        # いるため、時価総額（総額）を1株あたり純資産で割ってしまい、PBRが数億〜数百億倍
+        # という明らかな異常値になっていた（Layer5の実判断ログで発覚、日本株では発生せず
+        # 米国株のみで発生）。OVERVIEWが同じレスポンスで返す`SharesOutstanding`
+        # （発行済株式数）を使い、`BookValue × SharesOutstanding`で総純資産に換算する
+        # （追加のAPI呼び出し不要、未ライブ検証の二次情報ベースである点は本ファイル冒頭の
+        # 注意書きどおり）。`SharesOutstanding`が欠損・不正な値の場合はNoneとし、
+        # net_incomeと同様に「取得不能」として按分（reallocation）に任せる
+        # （誤った桁のPBRを出すより、算出不能の方が安全という設計判断）。
+        book_value_per_share = _to_float(payload.get("BookValue"))
+        shares_outstanding = _to_float(payload.get("SharesOutstanding"))
+        if book_value_per_share is not None and shares_outstanding:
+            net_assets = book_value_per_share * shares_outstanding
+        else:
+            net_assets = None
+
         return FundamentalSnapshot(
             ticker=ticker,
             fiscal_period=payload.get("LatestQuarter", ""),
             eps=_to_float(payload.get("EPS")),
-            net_assets=_to_float(payload.get("BookValue")),
+            net_assets=net_assets,
             net_income=None,  # OVERVIEWは比率中心のため、正確な純利益はINCOME_STATEMENTが必要（要検証）
             revenue=_to_float(payload.get("RevenueTTM")),
             operating_income=None,

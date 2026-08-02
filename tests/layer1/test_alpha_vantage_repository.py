@@ -78,6 +78,7 @@ def test_get_fundamentals_parses_overview(mock_get):
             "LatestQuarter": "2026-06-30",
             "EPS": "6.5",
             "BookValue": "4.2",
+            "SharesOutstanding": "15000000000",
             "RevenueTTM": "400000000000",
             "DividendPerShare": "1.0",
             "MarketCapitalization": "3000000000000",
@@ -94,6 +95,9 @@ def test_get_fundamentals_parses_overview(mock_get):
     # ための時価総額はOVERVIEWが直接提供するMarketCapitalizationから取得する
     # （run_daily_pipeline.pyのnet_income/EPSベースの近似計算に頼らずに済む）。
     assert snapshot.market_cap == 3_000_000_000_000.0
+    # 2026-08-03追加：net_assetsは「1株あたり純資産(BookValue) × 発行済株式数
+    # (SharesOutstanding)」で総純資産に換算されること（PBR異常値バグの回帰テスト）。
+    assert snapshot.net_assets == pytest.approx(4.2 * 15_000_000_000)
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.alpha_vantage.requests.get")
@@ -104,6 +108,28 @@ def test_get_fundamentals_market_cap_missing_defaults_to_none(mock_get):
     snapshot = repo.get_fundamentals("AAPL")
 
     assert snapshot.market_cap is None
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.alpha_vantage.requests.get")
+def test_get_fundamentals_net_assets_none_when_shares_outstanding_missing(mock_get):
+    # 2026-08-03追加：BookValueは1株あたり純資産のため、SharesOutstandingが無いと
+    # 総純資産への換算ができない。以前はBookValueをそのままnet_assets（総額想定）に
+    # 入れてしまい、PBR計算（market_cap÷net_assets）が数億〜数百億倍という明らかな
+    # 異常値になっていた（実運用ログで発覚）。換算できない場合はNoneとし、誤った桁の
+    # PBRを出すより算出不能として按分に任せる方が安全という設計判断。
+    mock_get.return_value = FakeResponse(
+        200,
+        {
+            "LatestQuarter": "2026-06-30",
+            "BookValue": "4.2",
+            "MarketCapitalization": "3000000000000",
+        },
+    )
+    repo = AlphaVantageRepository(api_key="k")
+
+    snapshot = repo.get_fundamentals("AAPL")
+
+    assert snapshot.net_assets is None
 
 
 def test_get_trading_calendar_raises_not_implemented():
