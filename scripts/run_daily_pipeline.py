@@ -204,6 +204,7 @@ def _estimate_market_cap(fundamentals, price_series: PriceSeries, ticker: str = 
 
 BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES = 5
 BULK_FETCH_COOLDOWN_SECONDS = 60.0
+BULK_FETCH_MAX_COOLDOWNS_PER_RUN = 10
 
 
 def _fetch_bulk_prices(
@@ -238,13 +239,22 @@ def _fetch_bulk_prices(
     連続アクセスに対するサーバー側の一時的な絞り込み（バースト制限やその時点の
     サーバー負荷等）の可能性が高いと考え、根本原因が確定するまでの暫定対策として、
     連続`BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES`回失敗した時点で
-    `BULK_FETCH_COOLDOWN_SECONDS`秒だけ一時停止してから再開するクールダウンを
-    1回だけ試みる（1回のみに限定するのは、クールダウンで回復しない場合に何度も
-    無駄な待機を繰り返して全体の実行時間が際限なく伸びるのを避けるため）。
+    `BULK_FETCH_COOLDOWN_SECONDS`秒だけ一時停止してから再開するクールダウンを試みる。
+
+    2026-08-05修正：当初は「1回のみ」に限定していたが（無限に待ち続けて実行時間が
+    際限なく伸びるのを避けるため）、その後1〜2週間分の実運用ログを見ると、序盤の
+    孤立した失敗（クールダウン1回で回復）とは別に、終盤（8000〜9000番台のティッカー）
+    で始まる連続失敗が発生した場合、そこから実行終了までクールダウン1回では一切
+    回復しないパターンが繰り返し観測された。1回限定のままでは、この終盤のブロックに
+    対して打つ手が無く、様子見を続けても改善しないと判断し、
+    `BULK_FETCH_MAX_COOLDOWNS_PER_RUN`回まで繰り返しクールダウンを試みるよう変更する。
+    上限を設けるのは、仮に一時的な絞り込みではなく回復しない種類のブロックだった
+    場合でも、無駄な待機の合計を「最大でも上限回数×`BULK_FETCH_COOLDOWN_SECONDS`秒」
+    に確実に収め、実行時間が際限なく伸びないようにするため（本関数の設計方針を維持）。
     """
     candidates: list = []
     consecutive_failures = 0
-    cooldown_used = False
+    cooldowns_used = 0
     for ticker in tickers:
         try:
             price_series = chain.call("get_daily_prices", ticker, start, end)
@@ -254,16 +264,17 @@ def _fetch_bulk_prices(
             )
             consecutive_failures += 1
             if (
-                not cooldown_used
+                cooldowns_used < BULK_FETCH_MAX_COOLDOWNS_PER_RUN
                 and consecutive_failures >= BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES
             ):
+                cooldowns_used += 1
                 logger.warning(
                     "stage1 bulk price fetch (%s): %d consecutive failures, "
-                    "cooling down for %.0f seconds before resuming",
+                    "cooling down for %.0f seconds before resuming (cooldown %d/%d)",
                     asset_class, consecutive_failures, BULK_FETCH_COOLDOWN_SECONDS,
+                    cooldowns_used, BULK_FETCH_MAX_COOLDOWNS_PER_RUN,
                 )
                 sleep(BULK_FETCH_COOLDOWN_SECONDS)
-                cooldown_used = True
                 consecutive_failures = 0
             continue
         consecutive_failures = 0

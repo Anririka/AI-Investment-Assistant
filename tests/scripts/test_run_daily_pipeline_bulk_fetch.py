@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 from run_daily_pipeline import (  # noqa: E402
     BULK_FETCH_COOLDOWN_SECONDS,
     BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES,
+    BULK_FETCH_MAX_COOLDOWNS_PER_RUN,
     _fetch_bulk_prices,
 )
 
@@ -91,10 +92,33 @@ def test_fetch_bulk_prices_triggers_cooldown_after_consecutive_failures():
     assert [c["ticker"] for c in result] == ["RECOVERED"]
 
 
-def test_fetch_bulk_prices_cooldown_triggers_at_most_once_per_call():
-    # クールダウンしても回復しない場合、無限に待ち続けず1回だけで打ち切る
+def test_fetch_bulk_prices_cooldown_can_trigger_multiple_times_and_recover_each_time():
+    # 2026-08-05修正：終盤で連続失敗が始まり、そこから実行終了まで一切回復しない
+    # パターンが実運用ログで繰り返し観測されたため、クールダウンを複数回まで許可する
+    # ようにした。連続失敗のブロックが複数回発生しても、それぞれクールダウン後に
+    # 回復できることを検証する。
     n = BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES
-    all_failing_tickers = [f"F{i}" for i in range(n * 3)]  # 閾値の3倍、全て失敗
+    block1 = [f"F1_{i}" for i in range(n)]
+    block2 = [f"F2_{i}" for i in range(n)]
+    tickers = block1 + ["RECOVERED1"] + block2 + ["RECOVERED2"]
+    chain = FakeChain(failing_tickers=set(block1) | set(block2))
+    sleep_fn, sleep_calls = _fake_sleep_recorder()
+
+    result = _fetch_bulk_prices(
+        chain, tickers, "japan_equity", date(2026, 1, 1), date(2026, 1, 2), sleep=sleep_fn
+    )
+
+    assert [c["ticker"] for c in result] == ["RECOVERED1", "RECOVERED2"]
+    # 2つの連続失敗ブロックそれぞれでクールダウンが発動する（1回限定ではない）
+    assert sleep_calls == [BULK_FETCH_COOLDOWN_SECONDS, BULK_FETCH_COOLDOWN_SECONDS]
+
+
+def test_fetch_bulk_prices_cooldown_stops_at_max_cap_when_never_recovering():
+    # クールダウンしても回復し続けない場合でも、無限に待ち続けず
+    # BULK_FETCH_MAX_COOLDOWNS_PER_RUN回で打ち切り、実行時間の際限ない増大を防ぐ
+    n = BULK_FETCH_COOLDOWN_TRIGGER_CONSECUTIVE_FAILURES
+    # 上限回数を超えるだけの連続失敗を用意する（上限×閾値より多い件数）
+    all_failing_tickers = [f"F{i}" for i in range(n * (BULK_FETCH_MAX_COOLDOWNS_PER_RUN + 2))]
     chain = FakeChain(failing_tickers=set(all_failing_tickers))
     sleep_fn, sleep_calls = _fake_sleep_recorder()
 
@@ -103,8 +127,8 @@ def test_fetch_bulk_prices_cooldown_triggers_at_most_once_per_call():
     )
 
     assert result == []
-    # 全銘柄失敗でも、クールダウンは高々1回のみ（際限なく待ち続けない）
-    assert sleep_calls == [BULK_FETCH_COOLDOWN_SECONDS]
+    # クールダウンはBULK_FETCH_MAX_COOLDOWNS_PER_RUN回で打ち切られる（際限なく待ち続けない）
+    assert sleep_calls == [BULK_FETCH_COOLDOWN_SECONDS] * BULK_FETCH_MAX_COOLDOWNS_PER_RUN
 
 
 def test_fetch_bulk_prices_default_sleep_parameter_is_time_sleep():
