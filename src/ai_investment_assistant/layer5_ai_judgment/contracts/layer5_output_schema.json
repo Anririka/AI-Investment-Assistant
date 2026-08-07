@@ -13,7 +13,11 @@
         "data_quality_gate", "data_quality_gate_detail", "score_meta_ref"
       ],
       "properties": {
-        "run_id": { "type": "string" },
+        "run_id": {
+          "type": "string",
+          "pattern": "^[0-9]{8}-[0-9]{4}$",
+          "description": "2026-08-08追加（実データで発覚した不具合対応）：run_idはLayer1〜Layer8を貫く一意識別子で、Layer7/Layer8がtracking_idの一部・月次集計キーとして使う。フォーマットはscripts/run_daily_pipeline.pyのnow_jst.strftime('%Y%m%d-%H%M')に合わせYYYYMMDD-HHMM固定とし、LLM（Layer5）がLayer2出力のrun_meta.run_idをコピーせず独自に値を作成・加工（例：'layer5-20260803-0635JST'のような値）した場合に、この時点で機械的に検知して落とす（プロンプト側の指示だけに頼らない、layer5_judgment_prompt_template.md 2-1/6-3参照）。"
+        },
         "layer5_started_at": { "type": "string" },
         "layer5_completed_at": { "type": "string" },
         "data_quality_gate": { "type": "string", "enum": ["passed", "warning_continued", "blocked"] },

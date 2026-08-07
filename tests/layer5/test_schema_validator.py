@@ -38,7 +38,7 @@ def test_validate_layer5_input_rejects_missing_portfolio_state_field():
 def _minimal_output():
     return {
         "run_meta": {
-            "run_id": "x", "layer5_started_at": "t", "layer5_completed_at": "t",
+            "run_id": "20260101-0000", "layer5_started_at": "t", "layer5_completed_at": "t",
             "data_quality_gate": "passed",
             "data_quality_gate_detail": {"blocking_errors_found": [], "warning_errors_found": []},
             "score_meta_ref": {},
@@ -63,3 +63,23 @@ def test_validate_layer5_output_rejects_invalid_data_quality_gate_value():
     invalid["run_meta"]["data_quality_gate"] = "unknown_value"
     with pytest.raises(SchemaValidationError):
         validate_layer5_output(invalid)
+
+
+def test_validate_layer5_output_rejects_run_id_not_matching_yyyymmdd_hhmm():
+    # 2026-08-08追加：LLM（Layer5）がLayer2出力のrun_meta.run_idをそのままコピーせず、
+    # 独自にrun_idを作成・加工してしまうケースが実データで発覚した（例：
+    # "layer5-20260803-0635JST"）。これによりLayer7/Layer8側でtracking_idの月次
+    # バケット分けやscore_context突合が壊れていた（position_evaluations_layer5.json
+    # という本来存在しないはずのファイルが生成される等）。scripts/run_daily_pipeline.pyの
+    # run_id生成フォーマット（YYYYMMDD-HHMM）に一致しない場合はこの時点で機械的に
+    # 検知して落とす（プロンプト側の指示だけに頼らない）。
+    invalid = _minimal_output()
+    invalid["run_meta"]["run_id"] = "layer5-20260803-0635JST"
+    with pytest.raises(SchemaValidationError):
+        validate_layer5_output(invalid)
+
+
+def test_validate_layer5_output_accepts_run_id_matching_yyyymmdd_hhmm():
+    valid = _minimal_output()
+    valid["run_meta"]["run_id"] = "20260807-0504"
+    validate_layer5_output(valid)  # 例外が出なければOK

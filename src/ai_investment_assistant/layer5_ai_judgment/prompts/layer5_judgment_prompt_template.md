@@ -53,6 +53,19 @@ Bashツールで実行して行う。あなた自身が暗算で数値を確定�
   （`technical`等）も付随する
 - `composite_score.total`：総合スコア
 - `run_meta.data_quality`：データ品質情報（`critical_errors`／`warning_errors`）
+- `run_meta.run_id`：**あなた自身の出力する`run_meta.run_id`（6-3手順6）へ、この値を
+  一字一句そのままコピーして使うこと。自分で新しい値を作成・加工したり、`layer5-`等の
+  プレフィックスを付け足したり、`layer5_completed_at`から独自に組み立てたりしては
+  ならない。** `run_id`はLayer1〜Layer8を貫く一意識別子であり、Layer7（保有銘柄
+  トラッキング）・Layer8（自己評価）がこの値をそのまま`tracking_id`の一部や月次集計の
+  キーとして使う。ここで値を改変すると、該当銘柄の評価が誤った期間（例：
+  `position_evaluations_202608.json`ではなく存在しない`position_evaluations_layer5.json`
+  等）に紐付けられ、その月の勝率集計・feedback生成から漏れるだけでなく、Layer8が
+  score_context（このLayer5判断時のreason_code等）を突合できなくなり
+  `reason_code_extraction_status: "no_match"`となって自己改善用のreason_code別成績
+  分析が欠落する（2026-08-08、Google Drive上の実データで発覚：`run_id`が
+  `layer5-20260803-0635JST`のように改変された銘柄が複数件存在し、上記の被害が
+  実際に発生していた）。
 
 **重要な禁止事項**：これらのスコアはLayer2が既に計算済みの確定値である。あなたはこの
 数値を再計算・上書き・改変してはならない。あなたの役割は、この確定済みスコアと
@@ -178,7 +191,8 @@ API呼び出しは機能しない）。実際のGoogle Driveとの読み書き�
    `scripts/decision_writer.py <そのファイルパス>` を実行する。ローカルの
    `$LAYER5_LOCAL_DATA_DIR/decisions/`へ保存され、標準出力に`local_path`（保存先の
    ローカルパス）と`drive_file_name`（Driveにアップロードする際のファイル名）が
-   JSONで返る。
+   JSONで返る。**`run_meta.run_id`は2-1で述べた通り、Layer2出力の`run_meta.run_id`を
+   一字一句そのままコピーすること（再掲：自分で作成・加工しない）。**
 
 ### 6-4. decision JSONのGoogle Driveへのアップロード
 
