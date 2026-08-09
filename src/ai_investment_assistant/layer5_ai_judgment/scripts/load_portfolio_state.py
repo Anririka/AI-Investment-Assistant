@@ -56,11 +56,35 @@ def resolve_total_capital(capital_policy: dict) -> float:
     """test_phase.enabledがtrueであれば、その値を投資可能資金として使う（人為的な
     上限であり、AIが自動調整するものではない。config/capital_policy.yaml参照）。
     そうでなければ恒久設計値（full_scale.total_capital）を使う。
+
+    2026-08-09追記：当初test_phase.total_capitalは「投資可能資金の総額」を絞る設定
+    として使っていたが、実際のユーザーの意図は「総額は300万円のままでよいが、
+    1銘柄あたりの購入金額をしばらくの間25万円以下に抑えたい」というものだった
+    （config/capital_policy.yamlの2026-08-09追記コメント参照）。そのため運用上は
+    test_phase.enabledをfalseにし、1銘柄あたりの上限はresolve_absolute_per_position_cap()
+    側で扱う。本関数自体のロジックは変更していない（将来、総額そのものを絞りたい
+    正当な理由が生じた場合のために残す）。
     """
     test_phase = capital_policy.get("test_phase", {})
     if test_phase.get("enabled"):
         return float(test_phase["total_capital"])
     return float(capital_policy["full_scale"]["total_capital"])
+
+
+def resolve_absolute_per_position_cap(capital_policy: dict) -> Optional[float]:
+    """per_position_cap.enabledがtrueであれば、1銘柄あたりの購入金額の絶対額上限
+    （円）を返す。無効、または設定自体が無い場合はNone（上限なし、from
+    position_sizer.pyのtotal_capital×33%のみが適用される）を返す。
+
+    2026-08-09追加（実運用で判明したユーザー意図とのズレの是正）：システム稼働直後の
+    リスク低減のため、1銘柄あたりの購入金額を一時的に25万円以下へ抑えたいという
+    ユーザーの意図を反映する。投資可能資金の総額（resolve_total_capital）とは独立した
+    別軸の制約であり、両者を混同しないこと（config/capital_policy.yaml参照）。
+    """
+    cap = capital_policy.get("per_position_cap", {})
+    if cap.get("enabled"):
+        return float(cap["max_amount"])
+    return None
 
 
 def _to_float(value: Optional[str], default: float = 0.0) -> float:
@@ -87,12 +111,17 @@ def build_portfolio_state(
     total_capital: float,
     sector_mapping: dict,
     as_of: str,
+    absolute_per_position_cap: Optional[float] = None,
 ) -> dict:
     """保有中の行のみを対象に、保有ポジション・残余投資可能資金・セクター集中度を
     算出する（§4-2のportfolio_stateスキーマそのものを組み立てる）。
 
     `為替レート`は日本株では1.0（省略時も1.0扱い）、米国株等では円換算のためのレートと
     して扱い、`invested_amount`は常に円換算後の値とする（total_capitalが円建てのため）。
+
+    `absolute_per_position_cap`（2026-08-09追加）：resolve_absolute_per_position_cap()の
+    結果をそのまま返り値に含める（LLMがposition_sizer.allocate_positions()呼び出し時に
+    そのまま渡せるようにするため）。Noneの場合は上限なし。
     """
     positions = []
     sector_concentration: dict = {}
@@ -130,6 +159,7 @@ def build_portfolio_state(
         "available_capital": total_capital - total_invested,
         "positions": positions,
         "sector_concentration": sector_concentration,
+        "absolute_per_position_cap": absolute_per_position_cap,
     }
 
 
@@ -149,11 +179,15 @@ def run_load_portfolio_state(
     latest = drive_client.read_latest_text_by_prefix(csv_subfolder, csv_name_prefix)
 
     total_capital = resolve_total_capital(capital_policy)
+    absolute_per_position_cap = resolve_absolute_per_position_cap(capital_policy)
 
     if latest is None:
         # 取引記録ファイルが1件も無い＝新規稼働時等はポジション0件として正常に扱う
         # （ファイルが存在するのに読めない場合とは区別する）。
-        portfolio_state = build_portfolio_state([], total_capital, sector_mapping, as_of.isoformat().replace("+00:00", "Z"))
+        portfolio_state = build_portfolio_state(
+            [], total_capital, sector_mapping, as_of.isoformat().replace("+00:00", "Z"),
+            absolute_per_position_cap=absolute_per_position_cap,
+        )
         return {"status": "ok", "reason_code": None, "portfolio_state": portfolio_state}
 
     _file_name, text = latest
@@ -163,7 +197,8 @@ def run_load_portfolio_state(
         return {"status": "blocked", "reason_code": "PORTFOLIO_STATE_INVALID", "portfolio_state": None, "error": str(exc)}
 
     portfolio_state = build_portfolio_state(
-        rows, total_capital, sector_mapping, as_of.isoformat().replace("+00:00", "Z")
+        rows, total_capital, sector_mapping, as_of.isoformat().replace("+00:00", "Z"),
+        absolute_per_position_cap=absolute_per_position_cap,
     )
     return {"status": "ok", "reason_code": None, "portfolio_state": portfolio_state}
 

@@ -12,6 +12,7 @@ from ai_investment_assistant.layer5_ai_judgment.scripts.load_portfolio_state imp
     build_portfolio_state,
     load_capital_policy,
     parse_trade_record_csv,
+    resolve_absolute_per_position_cap,
     resolve_total_capital,
     run_load_portfolio_state,
 )
@@ -57,20 +58,37 @@ def test_resolve_total_capital_uses_full_scale_when_test_phase_disabled():
     assert resolve_total_capital(policy) == 3000000
 
 
-def test_actual_capital_policy_yaml_loads_and_resolves_to_test_phase_amount():
+def test_actual_capital_policy_yaml_loads_and_resolves_to_full_scale_amount():
     # 実際のconfig/capital_policy.yamlがYAMLとして正しく読め、resolve_total_capital()が
     # 問題なく動作することを確認する。
     #
-    # 2026-07-26追記：Layer5〜Layer7の実データ初回検証が実際に成功したことを受け、
-    # planned_start_date/planned_end_dateはnullから実際の日付（"2026-07-26"／
-    # "2026-08-25"）へ人手で更新された（config/capital_policy.yaml参照）。
-    # resolve_total_capital()はこれらの日付を一切参照しない設計のため
-    # （test_resolve_total_capital_ignores_planned_dates_even_if_period_has_elapsed
-    # 参照）、値がnullか実日付かに関わらずtest_phaseの金額を返すことに変わりはない。
+    # 2026-08-09訂正：test_phaseは「投資可能資金の総額」を絞る目的では使わないことに
+    # なった（ユーザーの実際の意図は総額300万円のままで1銘柄あたりの購入額だけを
+    # 絞りたいというものだった、config/capital_policy.yamlの2026-08-09追記コメント
+    # 参照）。test_phase.enabledはfalseへ変更されたため、resolve_total_capital()は
+    # 恒久値（300万円）を返す。1銘柄あたりの上限はper_position_cap側で検証する
+    # （test_actual_capital_policy_yaml_resolves_absolute_per_position_cap参照）。
     policy = load_capital_policy()
-    assert policy["test_phase"]["planned_start_date"] == "2026-07-26"
-    assert policy["test_phase"]["planned_end_date"] == "2026-08-25"
-    assert resolve_total_capital(policy) == 250000
+    assert policy["test_phase"]["enabled"] is False
+    assert resolve_total_capital(policy) == 3000000
+
+
+def test_actual_capital_policy_yaml_resolves_absolute_per_position_cap():
+    # 2026-08-09追加：実際のconfig/capital_policy.yamlのper_position_capが
+    # 25万円として正しく解決されることを確認する。
+    policy = load_capital_policy()
+    assert policy["per_position_cap"]["enabled"] is True
+    assert resolve_absolute_per_position_cap(policy) == 250000
+
+
+def test_resolve_absolute_per_position_cap_returns_none_when_disabled():
+    policy = {"per_position_cap": {"enabled": False, "max_amount": 250000}}
+    assert resolve_absolute_per_position_cap(policy) is None
+
+
+def test_resolve_absolute_per_position_cap_returns_none_when_missing():
+    # per_position_capセクション自体が無い場合も上限なし（None）として扱う（後方互換）。
+    assert resolve_absolute_per_position_cap({}) is None
 
 
 def test_resolve_total_capital_ignores_planned_dates_even_if_period_has_elapsed():
@@ -128,6 +146,19 @@ def test_build_portfolio_state_unknown_ticker_maps_to_unknown_sector():
     assert state["positions"][0]["sector"] == "unknown"
 
 
+def test_build_portfolio_state_includes_absolute_per_position_cap_when_given():
+    state = build_portfolio_state(
+        [], total_capital=3000000, sector_mapping=SECTOR_MAPPING, as_of="2026-07-18T06:00:00Z",
+        absolute_per_position_cap=250000,
+    )
+    assert state["absolute_per_position_cap"] == 250000
+
+
+def test_build_portfolio_state_absolute_per_position_cap_defaults_to_none():
+    state = build_portfolio_state([], total_capital=3000000, sector_mapping=SECTOR_MAPPING, as_of="2026-07-18T06:00:00Z")
+    assert state["absolute_per_position_cap"] is None
+
+
 class FakeDriveClient:
     def __init__(self, latest=None):
         self._latest = latest
@@ -152,6 +183,20 @@ def test_run_load_portfolio_state_reads_latest_csv():
     result = run_load_portfolio_state(client, capital_policy, SECTOR_MAPPING)
     assert result["status"] == "ok"
     assert len(result["portfolio_state"]["positions"]) == 1
+
+
+def test_run_load_portfolio_state_resolves_and_passes_through_absolute_per_position_cap():
+    # 2026-08-09追加：capital_policyのper_position_capが正しくportfolio_stateへ
+    # 反映されることをrun_load_portfolio_state()レベルで確認する。
+    client = FakeDriveClient(latest=None)
+    capital_policy = {
+        "full_scale": {"total_capital": 3000000},
+        "test_phase": {"enabled": False, "total_capital": 250000},
+        "per_position_cap": {"enabled": True, "max_amount": 250000},
+    }
+    result = run_load_portfolio_state(client, capital_policy, SECTOR_MAPPING)
+    assert result["portfolio_state"]["total_capital"] == 3000000
+    assert result["portfolio_state"]["absolute_per_position_cap"] == 250000
 
 
 def test_run_load_portfolio_state_invalid_csv_returns_blocked():

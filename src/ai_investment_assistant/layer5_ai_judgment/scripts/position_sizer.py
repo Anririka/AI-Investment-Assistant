@@ -99,6 +99,7 @@ def size_position(
     fx_rate_to_jpy: float,
     per_position_cap_pct: float = PER_POSITION_CAP_PCT,
     stop_loss_pct: float = STOP_LOSS_PCT,
+    absolute_per_position_cap: Optional[float] = None,
 ) -> dict:
     """単一候補の推奨株数・損切/利確価格を確定計算する。
 
@@ -114,6 +115,16 @@ def size_position(
     予算の50倍規模の提案が生成される」バグを再発させかねないため、意図的に必須引数
     としている。
 
+    `absolute_per_position_cap`（2026-08-09追加、円建ての絶対額。省略可）：
+    load_portfolio_state.build_portfolio_state()が返す`portfolio_state.
+    absolute_per_position_cap`をそのまま渡す想定。指定された場合、1銘柄あたり投資
+    上限額は`total_capital × per_position_cap_pct`とこの絶対額の**小さい方**になる。
+    投資可能資金の総額（total_capital）自体を絞る目的の仕組み（resolve_total_capital）
+    とは独立した、1銘柄あたりの購入金額のみを一時的に抑えるための仕組み
+    （config/capital_policy.yamlのper_position_cap参照。ユーザーの実際の意図は
+    「総額300万円は変えず、1銘柄あたりの購入額だけ暫定的に25万円以下にしたい」
+    というものであり、この2軸を混同しないこと）。
+
     戻り値: 0株になった場合は {"excluded": True, "reason_code": "INSUFFICIENT_FUNDS_ZERO_SHARES"}。
     それ以外は sizing結果 dict（recommended_shares・position_amount・stop_loss_price・
     take_profit_price・rule_enforcement_log_entries・remaining_available_capital 等）。
@@ -123,6 +134,8 @@ def size_position(
     entry_price_jpy = entry_price * fx_rate_to_jpy
 
     per_position_cap = total_capital * per_position_cap_pct
+    if absolute_per_position_cap is not None:
+        per_position_cap = min(per_position_cap, absolute_per_position_cap)
     affordable_by_cap = per_position_cap / entry_price_jpy if entry_price_jpy else 0
     affordable_by_remaining = available_capital / entry_price_jpy if entry_price_jpy else 0
     raw_shares = min(affordable_by_cap, affordable_by_remaining)
@@ -172,6 +185,7 @@ def allocate_positions(
     total_capital: float,
     take_profit_policy: dict,
     usd_jpy_rate: float,
+    absolute_per_position_cap: Optional[float] = None,
 ) -> dict:
     """採用済み候補（最大3件、推奨順位順）を順に処理し、残余資金を逐次消費しながら
     配分する（§8「複数候補の同時配分」）。0株になった候補はproposalsに含めず、
@@ -184,6 +198,9 @@ def allocate_positions(
     将来、米ドル以外の通貨建て資産クラスが追加される場合はこの単純な二分岐を
     拡張する必要がある。
 
+    `absolute_per_position_cap`（2026-08-09追加）：size_position()へそのまま渡す
+    （呼び出し側は`portfolio_state.absolute_per_position_cap`を渡すこと）。
+
     戻り値: {"proposals": [...], "decision_log_entries": [...], "rule_enforcement_log": [...]}
     """
     remaining = available_capital
@@ -193,7 +210,10 @@ def allocate_positions(
 
     for candidate in candidates:
         fx_rate_to_jpy = 1.0 if candidate["asset_class"] == "japan_equity" else usd_jpy_rate
-        result = size_position(candidate, remaining, total_capital, take_profit_policy, fx_rate_to_jpy)
+        result = size_position(
+            candidate, remaining, total_capital, take_profit_policy, fx_rate_to_jpy,
+            absolute_per_position_cap=absolute_per_position_cap,
+        )
         if result["excluded"]:
             decision_log_entries.append({
                 "ticker": result["ticker"],

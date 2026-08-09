@@ -206,3 +206,39 @@ def test_allocate_positions_applies_usd_jpy_rate_to_us_equity_only():
     assert by_ticker["AAPL"]["position_amount"] == pytest.approx(
         by_ticker["AAPL"]["recommended_shares"] * 100.0 * 150.0
     )
+
+
+def test_size_position_absolute_per_position_cap_overrides_pct_based_cap_when_smaller():
+    # 2026-08-09追加：ユーザーの実際の意図（総額300万円は絞らず、1銘柄あたりの
+    # 購入額だけ一時的に25万円以下に抑えたい）を反映する回帰テスト。
+    # total_capital=3,000,000の33%=990,000円だが、absolute_per_position_cap=250,000円
+    # が指定されている場合はそちらが優先され、25万円以下の株数になるはず。
+    candidate = _candidate(ticker="7203", asset_class="japan_equity", entry_price_basis=1760.0)
+    result = size_position(candidate, available_capital=3000000, total_capital=3000000,
+                            take_profit_policy=TP_POLICY, fx_rate_to_jpy=1.0,
+                            absolute_per_position_cap=250000)
+    assert result["excluded"] is False
+    assert result["recommended_shares"] == int(250000 // 1760.0)
+    assert result["position_amount"] <= 250000
+
+
+def test_size_position_absolute_per_position_cap_none_uses_pct_based_cap_only():
+    # absolute_per_position_cap未指定（None）の場合は、従来通り33%ルールのみが
+    # 適用される（後方互換）。
+    candidate = _candidate(ticker="7203", asset_class="japan_equity", entry_price_basis=1760.0)
+    result = size_position(candidate, available_capital=3000000, total_capital=3000000,
+                            take_profit_policy=TP_POLICY, fx_rate_to_jpy=1.0)
+    assert result["recommended_shares"] == int((3000000 * 0.33) // 1760.0)
+    assert result["position_amount"] > 250000  # 33%上限(99万円)の方が大きいため25万円を超える
+
+
+def test_allocate_positions_passes_absolute_per_position_cap_to_each_candidate():
+    candidates = [
+        _candidate(ticker="7203", asset_class="japan_equity", entry_price_basis=1760.0),
+        _candidate(ticker="9104", asset_class="japan_equity", entry_price_basis=6186.0),
+    ]
+    result = allocate_positions(candidates, available_capital=3000000, total_capital=3000000,
+                                 take_profit_policy=TP_POLICY, usd_jpy_rate=1.0,
+                                 absolute_per_position_cap=250000)
+    for proposal in result["proposals"]:
+        assert proposal["position_amount"] <= 250000

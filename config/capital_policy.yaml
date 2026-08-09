@@ -29,17 +29,47 @@
 # 一切参照しないため、この記入自体が自動的な期限管理をもたらすものではない
 # （期間終了後の恒久値への移行判断は、必ず人間がenabled／total_capitalを直接編集して
 # 行うこと）。
+#
+# 2026-08-09訂正（実運用開始に伴うユーザーとの認識合わせ）：
+# 上記test_phaseは「投資可能資金の総額」を25万円に絞る設定として実装していたが、
+# これはユーザーの実際の意図と異なっていた。ユーザーの余剰資金自体は当初の恒久設計
+# 通り300万円あり、絞りたかったのは総額ではなく「システム稼働直後のリスク低減の
+# ため、しばらくの間は1銘柄あたりの購入金額を25万円以下に抑えたい」という、
+# 1銘柄単位の上限だった。そのため、投資可能資金の総額はtest_phase.enabled: falseと
+# して恒久値（300万円）を使うよう変更し、25万円という値は新設のper_position_cap
+# （1銘柄あたりの一時的な絶対額上限、下記）へ移した。position_sizer.pyの1銘柄あたり
+# 投資上限は、従来通りのtotal_capital×33%（=300万円×33%=99万円）とper_position_cap.
+# max_amountの小さい方が採用されるため、実質的に25万円が上限として機能する
+# （load_portfolio_state.resolve_absolute_per_position_cap()・position_sizer.
+# size_position()参照）。test_phaseセクション自体は将来「総額そのもの」を絞る
+# 正当な理由が生じた場合のために残すが、現在は使用しない（enabled: false）。
 full_scale:
   total_capital: 3000000
 
 test_phase:
-  enabled: true
+  enabled: false
   total_capital: 250000
   planned_duration_days: 30
   planned_start_date: "2026-07-26"
   planned_end_date: "2026-08-25"    # planned_start_dateの30日後（目安・記録用）
   note: >
-    初期信頼検証期間中のユーザー指定上限（2026-07確定、期間は最初の1か月を想定）。
-    全額運用（300万円）へ移行する際、または期間を延長・短縮する際は、この
-    enabled／total_capital／planned_end_date を人手で書き換えること
-    （コード側での自動切替・自動延長は一切行わない）。
+    2026-08-09時点で無効化（enabled: false）。投資可能資金の「総額」を絞る目的では
+    使わないこととした（1銘柄あたりの上限はper_position_capを参照）。ユーザーが
+    将来「総額そのもの」を絞りたい正当な理由が生じた場合のために、フィールド自体は
+    残してある。
+
+# 2026-08-09追加：1銘柄あたりの購入金額の一時的な絶対額上限（円）。投資可能資金の
+# 総額（total_capital、上記）とは独立した別軸の制約。position_sizer.size_position()が
+# total_capital×33%とこのmax_amountの小さい方を1銘柄あたりの上限として採用する。
+per_position_cap:
+  enabled: true
+  max_amount: 250000
+  planned_duration_days: 30
+  planned_start_date: "2026-08-09"
+  planned_end_date: "2026-09-08"    # planned_start_dateの30日後（目安・記録用）
+  note: >
+    システム稼働直後のリスク低減のための、1銘柄あたり購入金額の一時的な絶対額上限
+    （ユーザー明示確認事項、2026-08-09）。投資可能資金の総額（300万円）自体は
+    制限しない。この上限の解除・金額変更・期間の延長は、必ず人間がenabled／
+    max_amountを直接編集して判断する（コード側での自動切替・自動延長は一切行わない、
+    total_capitalのtest_phaseと同じ運用方針）。

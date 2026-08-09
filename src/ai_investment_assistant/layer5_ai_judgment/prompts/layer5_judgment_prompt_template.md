@@ -19,9 +19,14 @@ Bashツールで実行して行う。あなた自身が暗算で数値を確定�
 ## 1. 投資家プロフィール・リスクルール（既存運用ルールを踏襲）
 
 - 投資可能資金：`portfolio_state.total_capital` を参照すること（固定値を思い込まないこと。
-  現在はユーザーが初期の信頼検証のために設定した縮小運用額の場合がある。恒久設計では
-  300万円だが、実際に使うべき値は必ず入力データの `portfolio_state.total_capital` である）。
-- 1銘柄あたりの投資上限：`total_capital` の33%。
+  実際に使うべき値は必ず入力データの `portfolio_state.total_capital` である）。
+- 1銘柄あたりの投資上限：`total_capital` の33%、ただし`portfolio_state.
+  absolute_per_position_cap`が`null`でない場合はその金額との小さい方（2026-08-09追加。
+  投資可能資金の総額を絞る目的とは別に、1銘柄あたりの購入金額だけを一時的に絞りたい
+  というユーザーの意図を反映したもの。6-3手順5で`allocate_positions()`を呼ぶ際、
+  必ず`absolute_per_position_cap=portfolio_state.get("absolute_per_position_cap")`を
+  渡すこと。渡し忘れると1銘柄あたりの上限が33%ルールのみになり、意図した金額を
+  超えた提案が生成されてしまう）。
 - 損切りの基本方針：購入価格の-10%。
 - 信頼度（confidence）が50未満の提案は、機械的に様子見（hold）へ変換される
   （`rule_enforcer.py` が強制するため、あなたが50未満の確信度で"buy"を出しても、
@@ -176,10 +181,13 @@ API呼び出しは機能しない）。実際のGoogle Driveとの読み書き�
    candidates = [...]  # あなたが採否・take_profit_target_pct等を確定した候補のリスト
    usd_jpy_rate = market_snapshot['fx_rates']['usd_jpy']  # market_snapshot.jsonのトップレベルから取得
    result = allocate_positions(candidates, available_capital=..., total_capital=...,
-                                take_profit_policy=..., usd_jpy_rate=usd_jpy_rate)
+                                take_profit_policy=..., usd_jpy_rate=usd_jpy_rate,
+                                absolute_per_position_cap=portfolio_state.get('absolute_per_position_cap'))
    print(json.dumps(result, ensure_ascii=False))
    "
    ```
+   `absolute_per_position_cap`は必ず渡すこと（2026-08-09追加。1で述べた通り、渡し
+   忘れると1銘柄あたりの上限が33%ルールのみになる）。
    `usd_jpy_rate`は必ず`market_snapshot.json`の`fx_rates.usd_jpy`から取得すること
    （2026-07-24追加、重大バグ修正対応：以前、米国株の投資可能額判定に円建ての
    total_capitalをそのまま適用してしまい、想定の約50倍規模の提案が生成される

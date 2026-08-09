@@ -35,7 +35,11 @@
             }
           }
         },
-        "sector_concentration": { "type": "object" }
+        "sector_concentration": { "type": "object" },
+        "absolute_per_position_cap": {
+          "type": ["number", "null"],
+          "description": "2026-08-09追加。1銘柄あたり購入金額の一時的な絶対額上限（円）。config/capital_policy.yamlのper_position_capが無効の場合はnull（上限なし）。position_sizer.allocate_positions()呼び出し時にそのまま渡すこと（layer5_judgment_prompt_template.md参照）。"
+        }
       }
     }
   }
