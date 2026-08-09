@@ -2,6 +2,13 @@
 
 手順2〜9が全て成功した場合のみ、`tracking/layer7_completed_YYYYMMDD.json`を
 `completed: true`で書き込む（Layer4の完了フラグと同じ「全体不可分」の原則、§4手順10）。
+
+2026-08-09追加：新規取り込み（手順2）の際、`tracking/purchase_confirmations_YYYYMMDD.json`
+（存在すれば）を読み込み、`proposal_ingester.ingest_new_positions`へ渡す。ファイル形式は
+`{"entries": [{"ticker": "SBUX", "purchased": false}, {"ticker": "2801", "purchased": true,
+"actual_entry_price": 1758.0, "actual_shares": 46}]}`。ファイルが存在しない、または該当
+銘柄のエントリが無い場合は、従来通り提案＝約定済みとして取り込む（proposal_ingester.py
+のdocstring参照）。
 """
 
 from __future__ import annotations
@@ -48,9 +55,16 @@ def run(
 
         sheet_rows = drive_client.read_proposal_sheet_rows(date_str)
         skipped_duplicates = []
+        not_purchased = []
         if sheet_rows is not None:
-            new_positions, skipped_duplicates = proposal_ingester.ingest_new_positions(
-                sheet_rows, existing_positions, unit_days, fallback_default_days
+            confirmations_doc = drive_client.read_tracking_json(f"purchase_confirmations_{date_str}.json")
+            purchase_confirmations = (
+                {e["ticker"]: e for e in confirmations_doc.get("entries", [])}
+                if confirmations_doc is not None
+                else None
+            )
+            new_positions, skipped_duplicates, not_purchased = proposal_ingester.ingest_new_positions(
+                sheet_rows, existing_positions, unit_days, fallback_default_days, purchase_confirmations
             )
             existing_positions = existing_positions + new_positions
         # sheet_rowsがNone（Layer6シート未検出）の場合、新規取り込みはスキップし
@@ -141,8 +155,11 @@ def run(
 
     return {
         "completed": True,
-        "new_positions_count": len(sheet_rows) - len(skipped_duplicates) if sheet_rows else 0,
+        "new_positions_count": (
+            len(sheet_rows) - len(skipped_duplicates) - len(not_purchased) if sheet_rows else 0
+        ),
         "skipped_duplicates": skipped_duplicates,
+        "not_purchased": not_purchased,
         "failed_price_tickers": failed_tickers,
         "active_positions_count": len(remaining_active),
         "closed_positions": closed_positions,

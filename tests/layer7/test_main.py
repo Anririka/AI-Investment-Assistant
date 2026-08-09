@@ -73,6 +73,25 @@ def test_run_ingests_new_position_and_keeps_it_active():
     assert result["active_positions_count"] == 1
     assert client.tracking_files["active_positions.json"]["positions"][0]["ticker"] == "NVDA"
     assert client.completion_flags[-1][1]["completed"] is True
+    assert result["not_purchased"] == []
+
+
+def test_run_purchase_confirmations_excludes_not_purchased_proposal():
+    # 2026-08-09追加：tracking/purchase_confirmations_YYYYMMDD.jsonが存在する場合、
+    # purchased=falseの銘柄は取り込まれず、active_positions.jsonにも残らないことを
+    # main.run()レベルで検証する。
+    client = FakeDriveClient(sheet_rows=[_sheet_row()], active_positions=[])
+    client.tracking_files["purchase_confirmations_20260718.json"] = {
+        "entries": [{"ticker": "NVDA", "purchased": False}]
+    }
+    repo = FakeRepository({"NVDA": PriceSnapshot(date=date(2026, 7, 18), close=105, high=108, low=98, volume=1000)})
+    result = main.run(client, repo, date_str="20260718", unit_days=UNIT_DAYS, fallback_default_days=FALLBACK,
+                       now=datetime(2026, 7, 18, 21, 0, 0, tzinfo=timezone.utc), today=date(2026, 7, 18))
+    assert result["completed"] is True
+    assert result["active_positions_count"] == 0
+    assert result["new_positions_count"] == 0
+    assert result["not_purchased"] == [("20260718-0630", "NVDA")]
+    assert client.tracking_files["active_positions.json"]["positions"] == []
 
 
 def test_run_skips_duplicate_ingestion():

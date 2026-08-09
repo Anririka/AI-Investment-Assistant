@@ -108,11 +108,12 @@ def main() -> int:
     if result.get("completed"):
         logger.info(
             "=== run_layer7_tracking completed successfully: new=%d active=%d closed=%d "
-            "skipped_duplicates=%s failed_price_tickers=%s ===",
+            "skipped_duplicates=%s not_purchased=%s failed_price_tickers=%s ===",
             result.get("new_positions_count", 0),
             result.get("active_positions_count", 0),
             len(result.get("closed_positions", [])),
             result.get("skipped_duplicates"),
+            result.get("not_purchased"),
             result.get("failed_price_tickers"),
         )
         return 0
