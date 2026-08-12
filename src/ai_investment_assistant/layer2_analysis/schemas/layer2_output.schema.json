@@ -143,6 +143,7 @@
         "properties": {
           "ticker": { "type": "string" },
           "asset_class": { "type": "string" },
+          "name": { "type": "string", "description": "2026-08-12追加：銘柄名。Layer6の「除外・不採用ログ」シート表示用。requiredにはしない（Layer1/Layer3から渡される旧形式のupstream_excluded_summaryが欠く可能性を許容するため）が、本リポジトリ内の全ての除外エントリ生成箇所（screener.py・main.py・run_daily_pipeline.py）は常に設定する。" },
           "reason_code": { "type": "string" },
           "reason": { "type": "string" }
         }

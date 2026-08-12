@@ -395,10 +395,17 @@ def _fetch_market_candidates(
                     "source_layer": "layer1",
                 }
             )
+            # 2026-08-12追加：失敗時点では価格・ファンダメンタル取得前のため`info`変数
+            # （ループ内のtry節でticker_infos.get(ticker)を代入する箇所）はまだ設定されて
+            # いない可能性がある。ticker_infosはループ開始前に構築済みのため、ここで
+            # 直接引き直して銘柄名を取得する（除外理由に銘柄名を含める、除外・不採用ログ
+            # シート改善対応）。
+            failed_info = ticker_infos.get(ticker)
             excluded_summary.append(
                 {
                     "ticker": ticker,
                     "asset_class": asset_class,
+                    "name": failed_info.name if failed_info else ticker,
                     "reason_code": "SINGLE_STOCK_DATA_FAILURE",
                     "reason": f"データ取得に失敗したため当日の候補から除外: {exc}",
                 }

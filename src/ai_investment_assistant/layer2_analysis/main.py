@@ -155,6 +155,7 @@ def _build_screening_entry(raw: dict) -> dict:
     return {
         "ticker": raw["ticker"],
         "asset_class": raw["asset_class"],
+        "name": raw.get("name"),
         "market_cap": raw.get("market_cap"),
         "avg_volume": avg_volume,
         "is_delayed": bool(raw.get("is_delayed", False)),
@@ -387,6 +388,7 @@ def run(
                 {
                     "ticker": ticker,
                     "asset_class": raw.get("asset_class", "unknown"),
+                    "name": raw.get("name"),
                     "reason_code": "SCORING_FAILED",
                     "reason": f"スコア計算中にエラーが発生したため除外: {exc}",
                 }

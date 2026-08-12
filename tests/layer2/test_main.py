@@ -243,6 +243,10 @@ def test_screener_excludes_candidate_below_min_market_cap_but_pipeline_continues
     assert tickers == {"7203"}
     excluded_tickers = {e["ticker"]: e["reason_code"] for e in output["excluded_summary"]}
     assert excluded_tickers["6861"] == "MARKET_CAP_TOO_SMALL"
+    # 2026-08-12追加：除外・不採用ログシートに銘柄名も表示するため、excluded_summaryにも
+    # nameが通ることを確認する。
+    excluded_names = {e["ticker"]: e.get("name") for e in output["excluded_summary"]}
+    assert excluded_names["6861"] == "6861 Inc."
 
 
 # --- 毒薬テスト：1銘柄のスコア計算失敗が全体を止めない ------------------------------
@@ -270,6 +274,8 @@ def test_poison_pill_one_candidate_scoring_failure_does_not_crash_run(
 
     excluded_tickers = {e["ticker"]: e["reason_code"] for e in output["excluded_summary"]}
     assert excluded_tickers["6861"] == "SCORING_FAILED"
+    excluded_names = {e["ticker"]: e.get("name") for e in output["excluded_summary"]}
+    assert excluded_names["6861"] == "6861 Inc."
 
 
 # --- 毒薬テスト：ニュースのnews_schema_versionメジャー不一致 -----------------------

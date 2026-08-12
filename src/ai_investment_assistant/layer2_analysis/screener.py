@@ -6,6 +6,12 @@
 出力：フィルタ・統計付加済みの候補リスト＋除外銘柄と理由コードのリスト。
 
 ランキング・JSON組み立ての処理は一切持たない（§3-8、単一責任の原則）。
+
+2026-08-12追加：`excluded_summary`（Layer6「除外・不採用ログ」シートの元データ）に
+`name`（銘柄名）を含める。ユーザーから「証券コードだけでは銘柄が分かりにくいので
+銘柄名も表示してほしい」との要望があり、`candidates`（採用銘柄向けJSON）と同様に
+除外銘柄側にも`name`を通す（呼び出し側の`candidates`要素は元々`name`を持つため、
+ここでは単に転記するのみ）。
 """
 
 from __future__ import annotations
@@ -32,6 +38,7 @@ def filter_universe(candidates: list, universe_config: dict) -> tuple:
                 {
                     "ticker": c["ticker"],
                     "asset_class": c["asset_class"],
+                    "name": c.get("name"),
                     "reason_code": "DATA_DELAYED_12W",
                     "reason": "J-Quants Freeプランの12週遅延によりデータ品質ゲートで除外",
                 }
@@ -43,6 +50,7 @@ def filter_universe(candidates: list, universe_config: dict) -> tuple:
                 {
                     "ticker": c["ticker"],
                     "asset_class": c["asset_class"],
+                    "name": c.get("name"),
                     "reason_code": "MARKET_CAP_TOO_SMALL",
                     "reason": f"時価総額が下限（{min_cap}）未満",
                 }
@@ -54,6 +62,7 @@ def filter_universe(candidates: list, universe_config: dict) -> tuple:
                 {
                     "ticker": c["ticker"],
                     "asset_class": c["asset_class"],
+                    "name": c.get("name"),
                     "reason_code": "VOLUME_TOO_LOW",
                     "reason": f"平均出来高が下限（{min_vol}）未満",
                 }

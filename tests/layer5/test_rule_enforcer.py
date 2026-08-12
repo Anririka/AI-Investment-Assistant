@@ -8,7 +8,7 @@ from ai_investment_assistant.layer5_ai_judgment.scripts.rule_enforcer import (
 
 
 def _candidate(ticker, **overrides):
-    base = {"ticker": ticker, "overall_assessment": "buy", "confidence": 78,
+    base = {"ticker": ticker, "name": f"{ticker} Inc.", "overall_assessment": "buy", "confidence": 78,
             "preliminary_quant_rank": 1, "composite_score": 80, "rank": 1}
     base.update(overrides)
     return base
@@ -56,6 +56,9 @@ def test_enforce_daily_limit_over_limit_prioritizes_preliminary_quant_rank():
     assert [d["ticker"] for d in not_selected] == ["TSM"]
     assert not_selected[0]["reason_code"] == "DAILY_PROPOSAL_LIMIT_EXCEEDED"
     assert not_selected[0]["decision"] == "not_selected"
+    # 2026-08-12追加：除外・不採用ログシートに銘柄名も表示するため、not_selectedエントリには
+    # 元の候補のnameをそのまま転記する。
+    assert not_selected[0]["name"] == "TSM Inc."
     assert log["applied"] is True
 
 

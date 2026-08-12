@@ -53,3 +53,13 @@ def test_build_excluded_log_row_blank_reason_when_missing():
     row = build_excluded_log_row({"ticker": "X", "decision": "rejected", "reason_code": "Y"}, "20260718", "run1")
     assert row["理由"] == ""
     assert row["順位"] == ""
+    assert row["銘柄名"] == ""
+
+
+def test_build_excluded_log_row_includes_name():
+    # 2026-08-12追加：証券コードだけでなく銘柄名も表示してほしいというユーザー要望対応。
+    row = build_excluded_log_row(
+        {"ticker": "9101", "name": "日本郵船", "decision": "not_selected", "rank": 4, "reason_code": "DAILY_PROPOSAL_LIMIT_EXCEEDED"},
+        "20260812", "run1",
+    )
+    assert row["銘柄名"] == "日本郵船"

@@ -37,6 +37,17 @@ def test_excluded_sheet_excludes_adopted_entries():
     assert "NVDA" not in tickers
 
 
+def test_excluded_sheet_includes_name_column():
+    # 2026-08-12追加：証券コードだけでなく銘柄名も表示してほしいというユーザー要望対応。
+    model = build_presentation_model(sample_decision_document())
+    sheets = build_sheets_data(model, date_str="20260718")
+    header = sheets[SHEET_NAME_EXCLUDED][0]
+    assert header[3] == "銘柄名"
+    rows = sheets[SHEET_NAME_EXCLUDED][1:]
+    names = [row[3] for row in rows]  # 銘柄名は4列目
+    assert "Taiwan Semiconductor Manufacturing" in names
+
+
 def test_rules_sheet_includes_applied_false():
     model = build_presentation_model(sample_decision_document())
     sheets = build_sheets_data(model, date_str="20260718")

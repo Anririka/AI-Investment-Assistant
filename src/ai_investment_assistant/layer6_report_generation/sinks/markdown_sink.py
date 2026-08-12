@@ -53,11 +53,14 @@ def render_markdown(presentation_model: dict) -> str:
 
     lines.append("## 除外・不採用候補")
     lines.append("")
-    lines.append("| 証券コード | 判定 | 理由コード | 理由 |")
-    lines.append("|---|---|---|---|")
+    lines.append("| 証券コード | 銘柄名 | 判定 | 理由コード | 理由 |")
+    lines.append("|---|---|---|---|---|")
     for entry in build_excluded_candidates_for_display(decision_log):
+        name = entry.get("name") or ""
         reason = entry.get("reason") or ""
-        lines.append(f"| {entry.get('ticker')} | {entry.get('decision')} | {entry.get('reason_code')} | {reason} |")
+        lines.append(
+            f"| {entry.get('ticker')} | {name} | {entry.get('decision')} | {entry.get('reason_code')} | {reason} |"
+        )
     lines.append("")
 
     lines.append("## ルール適用ログ")

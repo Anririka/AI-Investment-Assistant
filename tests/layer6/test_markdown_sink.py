@@ -45,6 +45,14 @@ def test_render_markdown_preserves_proposal_values_exactly():
     assert "383.8" in text  # take_profit_price
 
 
+def test_render_markdown_excluded_table_includes_name_column():
+    # 2026-08-12追加：証券コードだけでなく銘柄名も表示してほしいというユーザー要望対応。
+    model = build_presentation_model(sample_decision_document())
+    text = render_markdown(model)
+    assert "| 証券コード | 銘柄名 | 判定 | 理由コード | 理由 |" in text
+    assert "| TSM | Taiwan Semiconductor Manufacturing | not_selected |" in text
+
+
 class FakeDriveClient:
     def __init__(self):
         self.saved = {}

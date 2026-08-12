@@ -85,6 +85,7 @@ def enforce_daily_limit(buy_candidates: list, max_per_day: int = MAX_DAILY_PROPO
     not_selected_entries = [
         {
             "ticker": c["ticker"],
+            "name": c.get("name"),
             "decision": "not_selected",
             "rank": c.get("rank"),
             "reason_code": "DAILY_PROPOSAL_LIMIT_EXCEEDED",

@@ -18,10 +18,12 @@ from run_daily_pipeline import _fetch_market_candidates  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from ai_investment_assistant.layer1_data_acquisition.exceptions import DataSourceError  # noqa: E402
 from ai_investment_assistant.layer1_data_acquisition.models import (  # noqa: E402
     DataFetchMeta,
     FundamentalSnapshot,
     PriceSeries,
+    TickerInfo,
 )
 
 
@@ -96,3 +98,38 @@ def test_candidate_built_correctly_with_split_chains():
     assert result[0]["ticker"] == "AAPL"
     assert result[0]["price_series"].meta.source_used == "twelve_data_bulk_chain"
     assert result[0]["fundamentals"].meta.source_used == "alpha_vantage_chain"
+
+
+class FailingPriceChain:
+    """get_listed_universeは銘柄マスタ（銘柄名を含む）を返すが、get_daily_pricesは
+    常に失敗するフェイク（SINGLE_STOCK_DATA_FAILURE経路のテスト用）。
+    """
+
+    def __init__(self):
+        self.last_source_used = "failing_chain"
+
+    def call(self, method_name, *args, **kwargs):
+        if method_name == "get_listed_universe":
+            return [TickerInfo(ticker="AAPL", name="Apple Inc.", sector_code=None, market=None, market_cap=None)]
+        if method_name == "get_daily_prices":
+            raise DataSourceError("simulated failure")
+        raise AssertionError(f"unexpected method_name={method_name}")
+
+
+def test_single_stock_data_failure_excluded_summary_includes_name():
+    # 2026-08-12追加：除外・不採用ログシートに銘柄名も表示してほしいというユーザー要望
+    # 対応。データ取得失敗（SINGLE_STOCK_DATA_FAILURE）でexcluded_summaryへ回す際も、
+    # get_listed_universeが返した銘柄マスタからnameを引けることを確認する
+    # （価格・ファンダメンタル取得より前の失敗のため、`info`ローカル変数には頼れない）。
+    chain = FailingPriceChain()
+    excluded_summary: list = []
+
+    _fetch_market_candidates(
+        chain, ["AAPL"], "us_equity", date(2026, 1, 1), date(2026, 1, 2),
+        warning_errors=[], excluded_summary=excluded_summary, degraded_sources=set(),
+    )
+
+    assert len(excluded_summary) == 1
+    assert excluded_summary[0]["ticker"] == "AAPL"
+    assert excluded_summary[0]["reason_code"] == "SINGLE_STOCK_DATA_FAILURE"
+    assert excluded_summary[0]["name"] == "Apple Inc."

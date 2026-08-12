@@ -49,10 +49,10 @@ def sample_decision_document(gate="passed"):
             },
         ],
         "decision_log": [
-            {"ticker": "NVDA", "decision": "adopted", "rank": 1, "reason_code": "ADOPTED_TOP_RANK"},
-            {"ticker": "AMD", "decision": "adopted", "rank": 2, "reason_code": "ADOPTED_TOP_RANK"},
-            {"ticker": "6723", "decision": "rejected", "reason_code": "DATA_DELAYED_12W", "reason": "データ品質ゲートで除外済み"},
-            {"ticker": "TSM", "decision": "not_selected", "rank": 4, "reason_code": "DAILY_PROPOSAL_LIMIT_EXCEEDED", "reason": "3件制限のため見送り"},
+            {"ticker": "NVDA", "name": "NVIDIA Corporation", "decision": "adopted", "rank": 1, "reason_code": "ADOPTED_TOP_RANK"},
+            {"ticker": "AMD", "name": "Advanced Micro Devices", "decision": "adopted", "rank": 2, "reason_code": "ADOPTED_TOP_RANK"},
+            {"ticker": "6723", "name": "ルネサスエレクトロニクス", "decision": "rejected", "reason_code": "DATA_DELAYED_12W", "reason": "データ品質ゲートで除外済み"},
+            {"ticker": "TSM", "name": "Taiwan Semiconductor Manufacturing", "decision": "not_selected", "rank": 4, "reason_code": "DAILY_PROPOSAL_LIMIT_EXCEEDED", "reason": "3件制限のため見送り"},
         ],
         "rule_enforcement_log": [
             {"rule": "confidence_gate", "applied": False},

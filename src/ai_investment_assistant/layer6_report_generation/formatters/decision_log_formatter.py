@@ -3,6 +3,12 @@
 `decision_log`の全件を省略せず表示する（Ver2「AI判断ログの完全保存」要件、§8）。
 表示順序の並び替え（`decision`種別→`rank`昇順→`ticker`昇順）は整列であり、値そのものは
 一切変更しない（§5-1）。`reason`が存在しない場合は空欄とし、推測的な補完はしない。
+
+2026-08-12追加：「除外・不採用ログ」シートが証券コードのみで銘柄名を含んでおらず、
+どの銘柄か分かりにくいというユーザー要望を受け、`銘柄名`列を追加する（`証券コード`列の
+直後）。`name`はLayer5が`decision_log`の各エントリに含める前提（layer5_output_schema.json・
+layer5_judgment_prompt_template.md §4参照）。値が無い場合（後方互換：過去の
+decision JSONに`name`が含まれない場合）は`理由`と同様に空欄とする。
 """
 
 from __future__ import annotations
@@ -35,6 +41,7 @@ def build_excluded_log_row(entry: dict, date_str: str, run_id: str) -> dict:
         "日付": date_str,
         "run_id": run_id,
         "証券コード": entry.get("ticker"),
+        "銘柄名": entry.get("name") if entry.get("name") is not None else "",
         "判定": entry.get("decision"),
         "順位": entry.get("rank") if entry.get("rank") is not None else "",
         "理由コード": entry.get("reason_code"),
@@ -42,7 +49,7 @@ def build_excluded_log_row(entry: dict, date_str: str, run_id: str) -> dict:
     }
 
 
-EXCLUDED_LOG_COLUMNS = ["日付", "run_id", "証券コード", "判定", "順位", "理由コード", "理由"]
+EXCLUDED_LOG_COLUMNS = ["日付", "run_id", "証券コード", "銘柄名", "判定", "順位", "理由コード", "理由"]
 
 
 def excluded_log_row_as_list(row: dict) -> list:

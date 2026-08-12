@@ -11,24 +11,37 @@ UNIVERSE_CONFIG = {
 
 
 def test_delayed_candidate_is_excluded_with_correct_reason_code():
-    candidates = [{"ticker": "6723", "asset_class": "japan_equity", "is_delayed": True, "market_cap": 1e12, "avg_volume": 1e6}]
+    candidates = [{"ticker": "6723", "name": "ルネサスエレクトロニクス", "asset_class": "japan_equity", "is_delayed": True, "market_cap": 1e12, "avg_volume": 1e6}]
     passed, excluded = filter_universe(candidates, UNIVERSE_CONFIG)
     assert passed == []
     assert excluded[0]["reason_code"] == "DATA_DELAYED_12W"
+    # 2026-08-12追加：除外・不採用ログシートに銘柄名も表示するため、除外エントリにも
+    # nameをそのまま転記する。
+    assert excluded[0]["name"] == "ルネサスエレクトロニクス"
 
 
 def test_market_cap_below_threshold_is_excluded():
-    candidates = [{"ticker": "X", "asset_class": "japan_equity", "market_cap": 1e9, "avg_volume": 1e6}]
+    candidates = [{"ticker": "X", "name": "X Corp", "asset_class": "japan_equity", "market_cap": 1e9, "avg_volume": 1e6}]
     passed, excluded = filter_universe(candidates, UNIVERSE_CONFIG)
     assert passed == []
     assert excluded[0]["reason_code"] == "MARKET_CAP_TOO_SMALL"
+    assert excluded[0]["name"] == "X Corp"
 
 
 def test_volume_below_threshold_is_excluded():
-    candidates = [{"ticker": "X", "asset_class": "japan_equity", "market_cap": 2e12, "avg_volume": 1000}]
+    candidates = [{"ticker": "X", "name": "X Corp", "asset_class": "japan_equity", "market_cap": 2e12, "avg_volume": 1000}]
     passed, excluded = filter_universe(candidates, UNIVERSE_CONFIG)
     assert passed == []
     assert excluded[0]["reason_code"] == "VOLUME_TOO_LOW"
+    assert excluded[0]["name"] == "X Corp"
+
+
+def test_excluded_entry_name_defaults_to_none_when_missing():
+    # nameが渡されなかった場合でもKeyErrorにならず、Noneのまま通ることを確認する
+    # （呼び出し側の後方互換）。
+    candidates = [{"ticker": "6723", "asset_class": "japan_equity", "is_delayed": True}]
+    _passed, excluded = filter_universe(candidates, UNIVERSE_CONFIG)
+    assert excluded[0]["name"] is None
 
 
 def test_candidate_meeting_all_conditions_passes():

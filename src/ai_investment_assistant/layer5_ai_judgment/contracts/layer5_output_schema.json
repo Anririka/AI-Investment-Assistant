@@ -96,6 +96,7 @@
         "required": ["ticker", "decision", "reason_code"],
         "properties": {
           "ticker": { "type": "string" },
+          "name": { "type": "string", "description": "2026-08-12追加：銘柄名。Layer6の「除外・不採用ログ」シートに証券コードだけでなく銘柄名も表示してほしいとのユーザー要望対応。requiredにはしない（過去に保存済みのdecision JSONとの後方互換のため）が、Layer2の`candidates`／`excluded_summary`のいずれも`name`を持つため、LLM（Layer5）は原則として全エントリに設定すること（layer5_judgment_prompt_template.md §4参照）。" },
           "decision": { "type": "string", "enum": ["adopted", "rejected", "not_selected"] },
           "rank": { "type": "integer" },
           "reason_code": { "type": "string" },
