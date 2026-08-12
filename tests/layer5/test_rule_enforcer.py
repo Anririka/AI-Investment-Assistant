@@ -2,6 +2,7 @@
 
 from ai_investment_assistant.layer5_ai_judgment.scripts.rule_enforcer import (
     apply_confidence_gate,
+    check_sector_concentration_warning,
     enforce_daily_limit,
 )
 
@@ -78,3 +79,53 @@ def test_enforce_daily_limit_does_not_resurrect_llm_excluded_candidates():
     adopted, not_selected, _log = enforce_daily_limit(buy_only)
     all_tickers = {c["ticker"] for c in adopted} | {d["ticker"] for d in not_selected}
     assert all_tickers == {"A", "B", "C", "D"}
+
+
+def _position(ticker, sector):
+    return {"ticker": ticker, "sector": sector}
+
+
+def test_check_sector_concentration_warning_flags_overlap_with_existing_holding():
+    adopted = [_candidate("9101")]
+    positions = [_position("9104", "shipping")]
+    sector_mapping = {"9101": "shipping", "9104": "shipping"}
+    log = check_sector_concentration_warning(adopted, positions, sector_mapping)
+    assert log["applied"] is True
+    assert "9101" in log["detail"]
+    assert "9104" in log["detail"]
+
+
+def test_check_sector_concentration_warning_flags_overlap_between_same_day_adopted():
+    adopted = [_candidate("9101"), _candidate("9107")]
+    sector_mapping = {"9101": "shipping", "9107": "shipping"}
+    log = check_sector_concentration_warning(adopted, [], sector_mapping)
+    assert log["applied"] is True
+    assert "9101" in log["detail"]
+    assert "9107" in log["detail"]
+
+
+def test_check_sector_concentration_warning_no_overlap_not_applied():
+    adopted = [_candidate("4183")]
+    positions = [_position("9104", "shipping")]
+    sector_mapping = {"4183": "chemicals", "9104": "shipping"}
+    log = check_sector_concentration_warning(adopted, positions, sector_mapping)
+    assert log["applied"] is False
+    assert "detail" not in log
+
+
+def test_check_sector_concentration_warning_unknown_sector_never_flagged():
+    # Both candidate and held position map to "unknown" (unregistered ticker); comparing
+    # unknowns would be a false positive, so they must never be flagged against each other.
+    adopted = [_candidate("9999")]
+    positions = [_position("8888", "unknown")]
+    sector_mapping = {}  # neither ticker registered -> both default to "unknown"
+    log = check_sector_concentration_warning(adopted, positions, sector_mapping)
+    assert log["applied"] is False
+
+
+def test_check_sector_concentration_warning_does_not_mutate_or_exclude_candidates():
+    adopted = [_candidate("9101"), _candidate("9107")]
+    sector_mapping = {"9101": "shipping", "9107": "shipping"}
+    before = [dict(c) for c in adopted]
+    check_sector_concentration_warning(adopted, [], sector_mapping)
+    assert adopted == before
