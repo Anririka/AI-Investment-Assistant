@@ -61,6 +61,16 @@ def fetch_japan_sector_table(repo: JQuantsRepository) -> dict:
 
     戻り値: {ticker: sector_name} の辞書（日経225以外の銘柄も含む全上場銘柄分。
     呼び出し側でuniverse.yamlの225銘柄のみに絞り込むこと）。
+
+    注意（2026-08-12発覚、重大バグ修正）：初回のGitHub Actionsライブ実行で、225銘柄
+    全てが「見つからない」扱いとなり`sectors: {}`（0件）が生成される事故が発生した。
+    原因はconfig/universe.yamlの銘柄コードが4桁の慣用表記（例：トヨタ自動車="7203"）
+    であるのに対し、J-Quantsの`Code`フィールドは末尾に検査用の"0"を付加した5桁表記
+    （例："72030"）で返るという仕様差だった（一部の英字を含む新形式コード、例"285A"は
+    対象外の可能性がある）。この不一致により`table.get(ticker)`が常にNoneを返していた。
+    対応として、5桁かつ末尾が"0"のコードは、末尾を除いた4桁表記でも同じsector_nameを
+    引けるよう、両方のキーを登録する（新形式コード等、5桁末尾"0"に該当しないものは
+    そのまま元のコードのみで登録される）。
     """
     payload = repo._request("/equities/master")  # noqa: SLF001 -- 一回限りの生成スクリプトのため許容
     rows = payload.get("data", [])
@@ -68,8 +78,11 @@ def fetch_japan_sector_table(repo: JQuantsRepository) -> dict:
     for row in rows:
         ticker = row.get("Code", row.get("code"))
         sector_name = row.get("S33Nm")
-        if ticker and sector_name:
-            table[ticker] = sector_name
+        if not ticker or not sector_name:
+            continue
+        table[ticker] = sector_name
+        if len(ticker) == 5 and ticker.endswith("0"):
+            table[ticker[:-1]] = sector_name
     return table
 
 
