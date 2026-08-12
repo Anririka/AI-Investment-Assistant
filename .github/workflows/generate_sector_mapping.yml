@@ -1,0 +1,47 @@
+# config/sector_mapping.yaml の日本株側（日経225・225銘柄）を実データで生成するための
+# 一回限りの手動ワークフロー（2026-08-12追加、layer5_ai_judgment §7-2対応）。
+#
+# scripts/generate_sector_mapping.py はJ-Quants /equities/master から東証33業種区分を
+# 取得するが、これには本番のJQUANTS_API_KEYが必要。Claude Coworkスケジュールタスク
+# （Layer5実行環境）はこのAPIキーを一切保持していない（Layer1〜4の実データ取得は
+# GitHub Actions側の専任であり、Layer5はGoogle Driveに保存済みのmarket_snapshotを
+# 読むだけの設計のため。layer5_judgment_prompt_template.md参照）。そのため、既存の
+# data_pipeline.yml等と同じsecretsが使えるGitHub Actions上で、workflow_dispatchのみの
+# （スケジュール無しの）このワークフローとして独立させた。
+#
+# 日次パイプラインには一切組み込まない。銘柄のセクター分類は短期間で頻繁に変わる
+# ものではないため、必要時（config/universe.yaml改訂時等）に人間が手動でこのワーク
+# フローを起動し、生成結果（ビルドアーティファクト）をダウンロード・レビューした上で
+# config/sector_mapping.yamlへ反映する運用とする。
+
+name: Generate Sector Mapping (Japan)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate sector mapping (Japan, from J-Quants)
+        env:
+          JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+        run: python scripts/generate_sector_mapping.py sector_mapping_japan_generated.yaml
+
+      - name: Upload generated sector mapping as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sector_mapping_japan_generated
+          path: sector_mapping_japan_generated.yaml
+          retention-days: 14

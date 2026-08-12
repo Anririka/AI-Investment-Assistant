@@ -24,7 +24,15 @@ config/sector_mapping.yaml は動作確認用のプレースホルダー（ト�
 同様、data_pipeline.yml/tracking_pipeline.ymlのsecretsとして既に設定済みのJQUANTS_API_KEY
 をそのまま使う）：
 
-    JQUANTS_API_KEY=xxx python scripts/generate_sector_mapping.py > /tmp/sector_mapping_japan.yaml
+    JQUANTS_API_KEY=xxx python scripts/generate_sector_mapping.py [出力先パス]
+    （出力先パス省略時は sector_mapping_japan_generated.yaml にカレントディレクトリへ書き出す）
+
+2026-08-12追記：Claude Coworkスケジュールタスク（Layer5実行環境）はJQUANTS_API_KEYを
+一切保持していない（Layer1〜4の実データ取得はGitHub Actions側の専任であり、Layer5は
+Google Driveに保存済みのmarket_snapshotを読むだけの設計。layer5_judgment_prompt_template.md
+参照）。そのため本スクリプトはCoworkセッションでは実行できず、
+`.github/workflows/generate_sector_mapping.yml`（workflow_dispatch、手動起動）経由で
+GitHub Actions上で実行し、結果をビルドアーティファクトとしてダウンロードする運用とする。
 
 日次パイプラインには組み込まない。銘柄のセクター分類は短期間で頻繁に変わるものでは
 ないため、必要時（config/universe.yaml改訂時等）に手動で再実行し、生成結果を人間が
@@ -74,11 +82,16 @@ def load_universe_tickers() -> dict:
     }
 
 
+_DEFAULT_OUTPUT_PATH = Path(__file__).resolve().parent.parent / "sector_mapping_japan_generated.yaml"
+
+
 def main() -> None:
     api_key = os.environ.get("JQUANTS_API_KEY", "")
     if not api_key:
         print("ERROR: JQUANTS_API_KEY is not set", file=sys.stderr)
         sys.exit(1)
+
+    output_path = Path(sys.argv[1]) if len(sys.argv) > 1 else _DEFAULT_OUTPUT_PATH
 
     universe = load_universe_tickers()
     repo = JQuantsRepository(api_key=api_key)
@@ -100,16 +113,16 @@ def main() -> None:
             file=sys.stderr,
         )
 
-    print("# 日本株セクター区分（J-Quants /equities/master、東証33業種区分、自動生成）")
-    print("# 生成元: scripts/generate_sector_mapping.py")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write("# 日本株セクター区分（J-Quants /equities/master、東証33業種区分、自動生成）\n")
+        f.write("# 生成元: scripts/generate_sector_mapping.py\n")
+        if missing:
+            f.write(f"# 未取得（要手動確認）: {missing}\n")
+        yaml.safe_dump({"sectors": sectors}, f, allow_unicode=True, sort_keys=True)
+
     print(
-        yaml.safe_dump({"sectors": sectors}, allow_unicode=True, sort_keys=True),
-        end="",
-    )
-    print(
-        f"\n# {len(sectors)}/{len(universe['japan_equity'])}銘柄を取得しました。"
-        f"米国株分・config/sector_mapping.yamlへの統合は別途手動で行ってください。",
-        file=sys.stderr,
+        f"OK: {len(sectors)}/{len(universe['japan_equity'])}銘柄を{output_path}へ書き出しました。"
+        f"米国株分・config/sector_mapping.yamlへの統合は別途手動で行ってください。"
     )
 
 
