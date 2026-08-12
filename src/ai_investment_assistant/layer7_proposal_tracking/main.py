@@ -6,9 +6,13 @@
 2026-08-09追加：新規取り込み（手順2）の際、`tracking/purchase_confirmations_YYYYMMDD.json`
 （存在すれば）を読み込み、`proposal_ingester.ingest_new_positions`へ渡す。ファイル形式は
 `{"entries": [{"ticker": "SBUX", "purchased": false}, {"ticker": "2801", "purchased": true,
-"actual_entry_price": 1758.0, "actual_shares": 46}]}`。ファイルが存在しない、または該当
-銘柄のエントリが無い場合は、従来通り提案＝約定済みとして取り込む（proposal_ingester.py
-のdocstring参照）。
+"actual_entry_price": 1758.0, "actual_shares": 46}]}`。
+
+2026-08-12追記（既定動作の反転）：ファイルが存在しない、または該当銘柄のエントリが無い、
+または`purchased`が明示的に`true`でない場合は、「未購入」として取り込みを見送る
+（旧仕様は逆に「提案＝約定済み」として取り込んでいたが、確認ファイルの提出が購入当日中
+という時間制約に依存する脆い設計だったため、未購入の提案がphantomポジションとして
+繰り返し自動追跡される実害が発生した。詳細はproposal_ingester.pyのdocstring参照）。
 """
 
 from __future__ import annotations

@@ -65,7 +65,12 @@ def _sheet_row(**overrides):
 
 
 def test_run_ingests_new_position_and_keeps_it_active():
+    # 2026-08-12：既定動作の反転により、取り込みにはpurchase_confirmationsでの
+    # purchased: true明示が必須になったため、確認ファイルを用意して渡す。
     client = FakeDriveClient(sheet_rows=[_sheet_row()], active_positions=[])
+    client.tracking_files["purchase_confirmations_20260718.json"] = {
+        "entries": [{"ticker": "NVDA", "purchased": True}]
+    }
     repo = FakeRepository({"NVDA": PriceSnapshot(date=date(2026, 7, 18), close=105, high=108, low=98, volume=1000)})
     result = main.run(client, repo, date_str="20260718", unit_days=UNIT_DAYS, fallback_default_days=FALLBACK,
                        now=datetime(2026, 7, 18, 21, 0, 0, tzinfo=timezone.utc), today=date(2026, 7, 18))

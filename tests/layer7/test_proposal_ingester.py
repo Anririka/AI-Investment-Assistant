@@ -19,12 +19,22 @@ def _sheet_row(**overrides):
     return base
 
 
+def _confirmed(ticker, **overrides):
+    """2026-08-12：取り込みには`purchased: true`の明示が必須になったため、
+    「取り込まれるはず」のテストは全てこのヘルパーでconfirmationsを渡す。"""
+    entry = {"purchased": True}
+    entry.update(overrides)
+    return {ticker: entry}
+
+
 def test_build_tracking_id_format():
     assert build_tracking_id("20260718-0630", "NVDA") == "TRK-20260718-0630-NVDA"
 
 
 def test_ingest_new_positions_creates_position_preserving_values():
-    new_positions, skipped, not_purchased = ingest_new_positions([_sheet_row()], [], UNIT_DAYS, FALLBACK)
+    new_positions, skipped, not_purchased = ingest_new_positions(
+        [_sheet_row()], [], UNIT_DAYS, FALLBACK, purchase_confirmations=_confirmed("NVDA")
+    )
     assert skipped == []
     assert not_purchased == []
     assert len(new_positions) == 1
@@ -41,7 +51,9 @@ def test_ingest_new_positions_creates_position_preserving_values():
 
 def test_ingest_new_positions_skips_existing_run_id_ticker_combo():
     existing = [{"run_id": "20260718-0630", "ticker": "NVDA"}]
-    new_positions, skipped, not_purchased = ingest_new_positions([_sheet_row()], existing, UNIT_DAYS, FALLBACK)
+    new_positions, skipped, not_purchased = ingest_new_positions(
+        [_sheet_row()], existing, UNIT_DAYS, FALLBACK, purchase_confirmations=_confirmed("NVDA")
+    )
     assert new_positions == []
     assert skipped == [("20260718-0630", "NVDA")]
     assert not_purchased == []
@@ -49,7 +61,9 @@ def test_ingest_new_positions_skips_existing_run_id_ticker_combo():
 
 def test_ingest_new_positions_same_run_new_ticker_not_skipped():
     existing = [{"run_id": "20260718-0630", "ticker": "AMD"}]
-    new_positions, skipped, not_purchased = ingest_new_positions([_sheet_row()], existing, UNIT_DAYS, FALLBACK)
+    new_positions, skipped, not_purchased = ingest_new_positions(
+        [_sheet_row()], existing, UNIT_DAYS, FALLBACK, purchase_confirmations=_confirmed("NVDA")
+    )
     assert len(new_positions) == 1
     assert skipped == []
     assert not_purchased == []
@@ -57,13 +71,17 @@ def test_ingest_new_positions_same_run_new_ticker_not_skipped():
 
 def test_ingest_new_positions_infers_asset_class_from_numeric_ticker():
     row = _sheet_row(証券コード="7203", 銘柄名="トヨタ自動車")
-    new_positions, _, _ = ingest_new_positions([row], [], UNIT_DAYS, FALLBACK)
+    new_positions, _, _ = ingest_new_positions(
+        [row], [], UNIT_DAYS, FALLBACK, purchase_confirmations=_confirmed("7203")
+    )
     assert new_positions[0]["asset_class"] == "japan_equity"
 
 
 def test_ingest_new_positions_records_fallback_parse_status():
     row = _sheet_row(想定保有期間="しばらく")
-    new_positions, _, _ = ingest_new_positions([row], [], UNIT_DAYS, FALLBACK)
+    new_positions, _, _ = ingest_new_positions(
+        [row], [], UNIT_DAYS, FALLBACK, purchase_confirmations=_confirmed("NVDA")
+    )
     assert new_positions[0]["parse_status"] == "fallback_used"
     assert new_positions[0]["holding_period_days_parsed"] == FALLBACK
 
@@ -80,7 +98,9 @@ def test_ingest_new_positions_coerces_string_numeric_fields_from_real_sheets_api
     row = _sheet_row(
         購入価格目安="333.74", 損切価格="300.37", 利確価格="383.80", 推奨株数="4",
     )
-    new_positions, _, _ = ingest_new_positions([row], [], UNIT_DAYS, FALLBACK)
+    new_positions, _, _ = ingest_new_positions(
+        [row], [], UNIT_DAYS, FALLBACK, purchase_confirmations=_confirmed("NVDA")
+    )
     position = new_positions[0]
     assert position["entry_price"] == 333.74
     assert isinstance(position["entry_price"], float)
@@ -117,19 +137,22 @@ def test_ingest_new_positions_purchase_confirmations_overrides_actual_price_and_
     assert new_positions[0]["stop_loss_price"] == 300.37
 
 
-def test_ingest_new_positions_purchase_confirmations_missing_ticker_defaults_to_purchased():
-    # confirmationsファイルはあるが、この銘柄のエントリが無い場合は従来通り取り込む（後方互換）。
+def test_ingest_new_positions_purchase_confirmations_missing_ticker_defaults_to_not_purchased():
+    # 2026-08-12：既定動作を反転。confirmationsファイルはあるが、この銘柄のエントリが
+    # 無い場合は「未購入」として取り込みを見送る（旧仕様は逆に取り込んでいたが、これが
+    # phantomポジション繰り返し発生の原因だったため反転した）。
     row = _sheet_row(証券コード="AMD")
     confirmations = {"2801": {"purchased": False}}
     new_positions, _, not_purchased = ingest_new_positions(
         [row], [], UNIT_DAYS, FALLBACK, purchase_confirmations=confirmations
     )
-    assert not_purchased == []
-    assert len(new_positions) == 1
+    assert new_positions == []
+    assert not_purchased == [("20260718-0630", "AMD")]
 
 
-def test_ingest_new_positions_no_confirmations_defaults_to_purchased_as_proposed():
-    # purchase_confirmations未指定（None）の場合は、従来通り全件「提案＝約定済み」として扱う。
+def test_ingest_new_positions_no_confirmations_defaults_to_not_purchased():
+    # 2026-08-12：既定動作を反転。purchase_confirmations未指定（None）の場合、
+    # 何も取り込まない（旧仕様は逆に全件「提案＝約定済み」としていた）。
     new_positions, skipped, not_purchased = ingest_new_positions([_sheet_row()], [], UNIT_DAYS, FALLBACK)
-    assert len(new_positions) == 1
-    assert not_purchased == []
+    assert new_positions == []
+    assert not_purchased == [("20260718-0630", "NVDA")]

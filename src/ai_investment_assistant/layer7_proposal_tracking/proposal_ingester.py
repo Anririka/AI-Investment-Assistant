@@ -12,9 +12,26 @@
 （買っていない銘柄が架空のポジションとして追跡され続ける）に直結することが判明した。
 `purchase_confirmations`（任意引数、tracking/配下の`purchase_confirmations_YYYYMMDD.json`
 から読み込む想定、証券コードをキーとする辞書）により、銘柄ごとに「実際に購入したか」
-「実際の約定価格・株数（提案と異なる場合）」を上書きできるようにする。このファイルが
-存在しない場合、または該当銘柄のエントリが無い場合は、従来通り「提案＝約定済み」として
-扱う（後方互換、確認ファイルの提供は必須ではない）。
+「実際の約定価格・株数（提案と異なる場合）」を上書きできるようにする。
+
+2026-08-12追記（重大バグ再発・既定動作の反転）：上記の初回対応は「confirmationファイルが
+存在しない、または該当銘柄のエントリが無い場合は、従来通り『提案＝約定済み』として扱う
+（後方互換）」という設計だった。しかし、confirmationファイルの提出はユーザーが購入した
+「その日のうちに」行う必要があり、実運用では購入報告が翌日以降になることが多く、結果的に
+ほぼ毎日「未購入の提案がphantomポジションとして自動追跡される」事故が繰り返し発生した
+（2026-08-11・8-12提案分で、日本郵船・HPQ・電通グループ等の未購入銘柄、およびSBUX・
+三井化学の重複ポジションが実際に発生し、手動でのDriveデータ復旧が必要になった）。
+
+この経緯を踏まえ、既定動作を反転する：**confirmationファイルが存在しない、または該当
+銘柄のエントリが無い、またはエントリはあるが`purchased`が明示的に`True`でない場合は、
+「購入していない」ものとして扱い、取り込みを見送る**（旧仕様の完全な反転。後方互換は
+もう維持しない）。取り込みには`purchased: true`の明示が必須となる。
+
+この変更により、確認ファイルが用意されていない日は何も自動追跡されなくなる
+（false positive＝架空ポジションの追跡を防ぐことを、false negative＝実際の購入の追跡が
+遅れることより優先する。前者は事後のデータ復旧作業を要するのに対し、後者は後から
+purchase_confirmationsを用意して次回実行時に取り込むだけで済むため、実害の非対称性から
+この優先順位とした）。
 """
 
 from __future__ import annotations
@@ -53,6 +70,11 @@ def ingest_new_positions(
     まま）。`purchase_confirmations`は証券コードをキーとする辞書
     （例：`{"SBUX": {"purchased": False}, "2801": {"purchased": True,
     "actual_entry_price": 1758.0, "actual_shares": 46}}`）。
+
+    2026-08-12：`purchased`が明示的に`True`のエントリのみ取り込む（確認ファイルが無い・
+    該当銘柄のエントリが無い・`purchased`がFalseまたは欠落、のいずれも「未購入」扱い。
+    上記モジュールdocstring参照）。
+
     戻り値: (新規position辞書のリスト, スキップされた重複キーのリスト,
     購入されなかったとして取り込みを見送ったキーのリスト)。
     """
@@ -71,17 +93,16 @@ def ingest_new_positions(
             continue
 
         confirmation = confirmations.get(ticker)
-        if confirmation is not None and confirmation.get("purchased") is False:
+        if confirmation is None or confirmation.get("purchased") is not True:
             not_purchased.append(key)
             continue
 
         entry_price = row.get("購入価格目安")
         recommended_shares = row.get("推奨株数")
-        if confirmation is not None:
-            if confirmation.get("actual_entry_price") is not None:
-                entry_price = confirmation["actual_entry_price"]
-            if confirmation.get("actual_shares") is not None:
-                recommended_shares = confirmation["actual_shares"]
+        if confirmation.get("actual_entry_price") is not None:
+            entry_price = confirmation["actual_entry_price"]
+        if confirmation.get("actual_shares") is not None:
+            recommended_shares = confirmation["actual_shares"]
 
         holding_period_raw = row.get("想定保有期間")
         days, parse_status = parse_holding_period_days(holding_period_raw, unit_days, fallback_default_days)
