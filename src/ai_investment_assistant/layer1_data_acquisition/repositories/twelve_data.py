@@ -42,7 +42,25 @@ class TwelveDataRepository(MarketDataRepository):
                 params={**params, "apikey": self._api_key},
                 timeout=TIMEOUT_SECONDS,
             )
-        except (requests.ConnectionError, requests.Timeout) as exc:
+        except (
+            requests.ConnectionError,
+            requests.Timeout,
+            # 2026-08-26追加（実運用ログで発覚：SNAPSHOT_MISSING「Response ended
+            # prematurely」が2日連続で発生し、us_equity_bulk_price stage1が丸ごと
+            # blocked扱いになった件の根本対応）。ChunkedEncodingErrorは
+            # urllib3のProtocolError（"Response ended prematurely"＝サーバー側が
+            # レスポンス送信を完了する前に接続を切った場合）をrequestsが再送出する例外で、
+            # requests.ConnectionErrorのサブクラスではないため、これまでの
+            # except節では捕捉されずTransientErrorに変換されないまま素通りしていた。
+            # 725銘柄規模・約63分のbulk scan中に1回でも発生すると、本来「1銘柄だけ
+            # 静かに除外して継続する」設計（_fetch_bulk_prices docstring参照）が働かず、
+            # 未捕捉のまま呼び出し元の一番外側まで伝播し、米国株スキャン全体が
+            # critical（SNAPSHOT_MISSING）として扱われてしまっていた。
+            # ContentDecodingErrorも同種（レスポンスボディの展開に失敗する一時的な
+            # 通信起因のエラー）のため合わせて含める。
+            requests.exceptions.ChunkedEncodingError,
+            requests.exceptions.ContentDecodingError,
+        ) as exc:
             raise TransientError(str(exc)) from exc
 
         if response.status_code == 429:

@@ -85,6 +85,7 @@ from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import requests
 import yaml
 
 from ai_investment_assistant.layer1_data_acquisition.caching import build_default_cache_store
@@ -258,7 +259,15 @@ def _fetch_bulk_prices(
     for ticker in tickers:
         try:
             price_series = chain.call("get_daily_prices", ticker, start, end)
-        except DataSourceError as exc:
+        # 2026-08-26追加（対策②、①のtwelve_data.py修正だけに頼らない二重の安全網）：
+        # DataSourceError系だけでなく、requests.exceptions.RequestException系の
+        # 想定外の例外も、当該ticker1件のみ除外して継続する対象に含める。①のように
+        # 各Repository実装の_request()側で正しくTransientError等に変換されるのが
+        # 本来の経路だが、今後別プロバイダを追加した際に同種の変換漏れが再発しても、
+        # このstage1スキャン全体を巻き込んで丸ごとcritical（SNAPSHOT_MISSING）に
+        # してしまわないようにする（本関数のdocstring通り「1銘柄の取得失敗は当該銘柄
+        # を母集団から静かに除外する」という設計意図に、実装を合わせる）。
+        except (DataSourceError, requests.exceptions.RequestException) as exc:
             logger.warning(
                 "stage1 bulk price fetch failed for %s (%s): %s", ticker, asset_class, exc
             )

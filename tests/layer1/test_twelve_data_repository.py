@@ -4,11 +4,13 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
+import requests
 
 from ai_investment_assistant.layer1_data_acquisition.exceptions import (
     AuthError,
     NotFoundError,
     RateLimitError,
+    TransientError,
 )
 from ai_investment_assistant.layer1_data_acquisition.repositories.twelve_data import (
     TwelveDataRepository,
@@ -145,3 +147,32 @@ def test_get_trading_calendar_raises_not_implemented():
     repo = TwelveDataRepository(api_key="k")
     with pytest.raises(NotImplementedError):
         repo.get_trading_calendar()
+
+
+@pytest.mark.parametrize(
+    "raised_exception",
+    [
+        requests.exceptions.ChunkedEncodingError("Response ended prematurely"),
+        requests.exceptions.ContentDecodingError("bad content encoding"),
+    ],
+)
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.twelve_data.requests.get")
+def test_chunked_encoding_and_content_decoding_errors_convert_to_transient_error(
+    mock_get, raised_exception
+):
+    """2026-08-25・26と2日連続で発生した実障害の回帰テスト。
+
+    Twelve Dataがレスポンス送信を完了する前に接続を切った場合、requestsは
+    ChunkedEncodingError（"Response ended prematurely"というメッセージを持つ
+    urllib3のProtocolErrorをラップしたもの）を送出する。これはrequests.ConnectionError
+    のサブクラスではないため、以前は_request()のexcept節で捕捉されずTransientErrorに
+    変換されないまま素通りし、_fetch_bulk_prices側のexcept DataSourceErrorでも
+    捕捉できず、stage1の米国株スキャン全体をcritical（SNAPSHOT_MISSING）にしていた
+    （2026-08-25・26の実データで確認）。TransientErrorに変換されれば、
+    FallbackChainRepository.call()の既存のリトライ・フォールバック経路にそのまま乗る。
+    """
+    mock_get.side_effect = raised_exception
+    repo = TwelveDataRepository(api_key="k")
+
+    with pytest.raises(TransientError):
+        repo.get_daily_prices("AAPL", date(2026, 7, 16), date(2026, 7, 17))
