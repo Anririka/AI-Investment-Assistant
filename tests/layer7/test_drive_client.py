@@ -185,3 +185,117 @@ def test_constructor_requires_credentials():
     import pytest
     with pytest.raises(ValueError):
         Layer7DriveClient(oauth_token_json="", root_folder_id="root")
+
+
+# --- _execute_with_retry（2026-08-31追加、実運用障害対応） --------------------------
+#
+# 2026-08-31、GitHub Actions本番実行でGoogle Sheets APIのvalues.getが
+# `HttpError 500 "Internal error encountered."`で失敗し、Layer7が本日分の位置追跡・
+# 損切/利確判定を一切実行できないまま失敗する事故が発生した。5xx系（Googleサーバー側の
+# 一時的な障害）はリトライし、4xx系（リトライしても解決しないエラー）は即座に
+# 再送出することを検証する。
+
+
+def _http_error(status: int, message: bytes = b'{"error": {"message": "boom"}}'):
+    from googleapiclient.errors import HttpError
+    import httplib2
+
+    return HttpError(httplib2.Response({"status": status}), message)
+
+
+class _FlakyRequest:
+    """`.execute()`を呼ぶたびに`side_effects`の先頭を1つずつ消費するフェイク。
+    値が例外インスタンスならそれをraiseし、それ以外はそのまま返す。
+    """
+
+    def __init__(self, side_effects: list):
+        self._side_effects = list(side_effects)
+        self.call_count = 0
+
+    def execute(self):
+        self.call_count += 1
+        effect = self._side_effects.pop(0)
+        if isinstance(effect, Exception):
+            raise effect
+        return effect
+
+
+def test_execute_with_retry_succeeds_immediately_when_no_error():
+    client = Layer7DriveClient(oauth_token_json="{}", root_folder_id="root")
+    request = _FlakyRequest(["ok"])
+    assert client._execute_with_retry(request) == "ok"
+    assert request.call_count == 1
+
+
+def test_execute_with_retry_retries_on_5xx_then_succeeds():
+    sleeps = []
+    client = Layer7DriveClient(oauth_token_json="{}", root_folder_id="root", sleep=sleeps.append)
+    request = _FlakyRequest([_http_error(500), _http_error(503), "ok"])
+    assert client._execute_with_retry(request) == "ok"
+    assert request.call_count == 3
+    assert sleeps == [1.0, 2.0]  # 指数バックオフ（1秒→2秒）
+
+
+def test_execute_with_retry_raises_immediately_on_4xx_without_sleeping():
+    sleeps = []
+    client = Layer7DriveClient(oauth_token_json="{}", root_folder_id="root", sleep=sleeps.append)
+    request = _FlakyRequest([_http_error(403)])
+    import pytest
+    from googleapiclient.errors import HttpError
+    with pytest.raises(HttpError):
+        client._execute_with_retry(request)
+    assert request.call_count == 1
+    assert sleeps == []
+
+
+def test_execute_with_retry_gives_up_after_max_attempts_and_raises_last_error():
+    sleeps = []
+    client = Layer7DriveClient(oauth_token_json="{}", root_folder_id="root", sleep=sleeps.append)
+    request = _FlakyRequest([_http_error(500), _http_error(500), _http_error(500)])
+    import pytest
+    from googleapiclient.errors import HttpError
+    with pytest.raises(HttpError):
+        client._execute_with_retry(request)
+    assert request.call_count == 3  # 既定のmax_attempts=3回で打ち切り
+    assert sleeps == [1.0, 2.0]  # 3回目失敗後はもうスリープせず即座に再送出
+
+
+def test_execute_with_retry_does_not_retry_non_http_errors():
+    # HttpError以外（ネットワーク断など想定外の例外）は本対応のスコープ外のため
+    # そのまま即座に伝播することを確認する（誤って無限にリトライしないこと）。
+    sleeps = []
+    client = Layer7DriveClient(oauth_token_json="{}", root_folder_id="root", sleep=sleeps.append)
+    request = _FlakyRequest([ConnectionError("boom")])
+    import pytest
+    with pytest.raises(ConnectionError):
+        client._execute_with_retry(request)
+    assert request.call_count == 1
+    assert sleeps == []
+
+
+class _FlakySheetsService:
+    """`_read_sheet_values`が実際に`_execute_with_retry`経由で`.execute()`を
+    呼んでいることを、実際のGoogleAPIリクエストチェーン形状（`spreadsheets().values()
+    .get(...)`）を模したフェイクで検証する。
+    """
+
+    def __init__(self, side_effects: list):
+        self._request = _FlakyRequest(side_effects)
+
+    def spreadsheets(self):
+        return self
+
+    def values(self):
+        return self
+
+    def get(self, spreadsheetId, range):  # noqa: A002
+        return self._request
+
+
+def test_read_sheet_values_recovers_from_transient_5xx_error():
+    # 2026-08-31の実障害の直接的な回帰テスト：Google Sheets側の一時的な500エラーが
+    # 1回発生しても、_read_sheet_values全体としては正常に値を返せることを確認する。
+    client = Layer7DriveClient(oauth_token_json="{}", root_folder_id="root", sleep=lambda _s: None)
+    service = _FlakySheetsService([_http_error(500), {"values": [["run_id"], ["20260831-0630"]]}])
+    result = client._read_sheet_values(service, "sheet-id")
+    assert result == [["run_id"], ["20260831-0630"]]

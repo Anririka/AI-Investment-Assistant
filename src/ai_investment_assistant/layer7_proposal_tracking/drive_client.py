@@ -9,12 +9,29 @@
 
 `tracking/layer7_completed_YYYYMMDD.json`のみ、Layer4・Layer6の完了フラグ／インデックス
 と同様、同日複数回実行時は`createdTime`最大のものを正とする方式を採る（§6-5）。
+
+2026-08-31追加（実運用で発覚した障害対応）：GitHub Actions本番実行で、Google Sheets APIの
+`values.get`（`_read_sheet_values`、「本日の提案」シート読み取り）が`HttpError 500
+"Internal error encountered."`で失敗し、Layer7が本日分の位置追跡・損切/利確判定を一切
+実行できないまま失敗する事故が発生した。このエラーメッセージ自体がGoogle側の一時的な
+内部障害を示す汎用文言であり、当該処理は直前まで（GitHub Actionsの実行履歴上）連日
+問題なく成功し続けていたことから、こちら側のデータ・コードに起因する恒常的な不具合
+ではなく、外部API側の一時的な障害である可能性が高いと判断した。TwelveDataの
+ChunkedEncodingError対応（scripts配下、2026-08-27）と同種の「外部APIの一時的な障害で
+処理全体を落とさない」という設計方針を、Google API呼び出し側にも適用する。全ての
+`.execute()`呼び出しを`_execute_with_retry`でラップし、5xx系（Googleサーバー側の一時的な
+障害を示す）のみ短い間隔でリトライする。4xx系（認証エラー・権限エラー・存在しない
+ファイル等、リトライしても解決しない種類のエラー）は従来通り即座に再送出する。
 """
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
+
+MAX_EXECUTE_ATTEMPTS = 3
+RETRY_BACKOFF_BASE_SECONDS = 1.0
 
 
 class Layer7DriveClient:
@@ -23,13 +40,40 @@ class Layer7DriveClient:
         oauth_token_json: str,
         root_folder_id: str,
         clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if not oauth_token_json or not root_folder_id:
             raise ValueError("oauth_token_json and root_folder_id are required")
         self._oauth_token_json = oauth_token_json
         self._root_folder_id = root_folder_id
         self._clock = clock
+        self._sleep = sleep
         self._folder_cache: dict = {}
+
+    def _execute_with_retry(self, request: Any, max_attempts: int = MAX_EXECUTE_ATTEMPTS) -> Any:
+        """Google API呼び出し（`....().execute()`のうち`.execute()`部分）を、5xx系
+        （Googleサーバー側の一時的な障害）に限定してリトライ付きで実行する
+        （2026-08-31追加、モジュールdocstring参照）。
+
+        `request`は`.execute()`を持つGoogle APIのリクエストオブジェクト（例：
+        `service.files().list(...)`の戻り値）。4xx系（`HttpError`のうち`resp.status`が
+        500未満、または`resp`が無い場合）はリトライせず即座に再送出する。5xx系のみ、
+        指数バックオフ（1秒→2秒→4秒…）で`max_attempts`回まで試行する。
+        """
+        from googleapiclient.errors import HttpError
+
+        last_exc: Optional[HttpError] = None
+        for attempt in range(max_attempts):
+            try:
+                return request.execute()
+            except HttpError as exc:
+                status = exc.resp.status if getattr(exc, "resp", None) is not None else None
+                is_retryable = status is not None and 500 <= status < 600
+                if not is_retryable or attempt == max_attempts - 1:
+                    raise
+                last_exc = exc
+                self._sleep(RETRY_BACKOFF_BASE_SECONDS * (2**attempt))
+        raise last_exc  # pragma: no cover — ループは必ずreturnかraiseで抜ける
 
     # --- lazy import／実API呼び出し ---------------------------------------------------
 
@@ -69,7 +113,7 @@ class Layer7DriveClient:
             f"name = '{name}' and '{parent_id}' in parents and "
             "mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         )
-        results = service.files().list(q=query, fields="files(id, name)").execute()
+        results = self._execute_with_retry(service.files().list(q=query, fields="files(id, name)"))
         files = results.get("files", [])
         return files[0]["id"] if files else None
 
@@ -79,21 +123,21 @@ class Layer7DriveClient:
             "parents": [parent_id],
             "mimeType": "application/vnd.google-apps.folder",
         }
-        created = service.files().create(body=metadata, fields="id").execute()
+        created = self._execute_with_retry(service.files().create(body=metadata, fields="id"))
         return created["id"]
 
     def _find_file(self, service: Any, name: str, parent_id: str) -> Optional[str]:
         query = f"name = '{name}' and '{parent_id}' in parents and trashed = false"
-        results = service.files().list(q=query, fields="files(id, name)").execute()
+        results = self._execute_with_retry(service.files().list(q=query, fields="files(id, name)"))
         files = results.get("files", [])
         return files[0]["id"] if files else None
 
     def _find_latest_file_id(self, service: Any, name: str, parent_id: str) -> Optional[str]:
         """同名ファイルが複数存在する場合、createdTimeが最大のものを返す（§6-5）。"""
         query = f"name = '{name}' and '{parent_id}' in parents and trashed = false"
-        results = service.files().list(
-            q=query, fields="files(id, name, createdTime)", orderBy="createdTime desc"
-        ).execute()
+        results = self._execute_with_retry(
+            service.files().list(q=query, fields="files(id, name, createdTime)", orderBy="createdTime desc")
+        )
         files = results.get("files", [])
         return files[0]["id"] if files else None
 
@@ -121,10 +165,12 @@ class Layer7DriveClient:
         raw = _json.dumps(content, ensure_ascii=False, indent=2).encode("utf-8")
         media = MediaIoBaseUpload(io.BytesIO(raw), mimetype="application/json")
         if existing_file_id:
-            service.files().update(fileId=existing_file_id, media_body=media).execute()
+            self._execute_with_retry(service.files().update(fileId=existing_file_id, media_body=media))
             return existing_file_id
         metadata = {"name": name, "parents": [parent_id]}
-        created = service.files().create(body=metadata, media_body=media, fields="id").execute()
+        created = self._execute_with_retry(
+            service.files().create(body=metadata, media_body=media, fields="id")
+        )
         return created["id"]
 
     def _read_sheet_values(
@@ -144,9 +190,9 @@ class Layer7DriveClient:
         （702列相当）まで広げた十分な余裕を持たせる。
         """
         range_ = f"{sheet_title}!A:ZZ" if sheet_title else "A:ZZ"
-        result = sheets_service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id, range=range_
-        ).execute()
+        result = self._execute_with_retry(
+            sheets_service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range_)
+        )
         return result.get("values", [])
 
     # --- 共通ロジック ---------------------------------------------------------------
