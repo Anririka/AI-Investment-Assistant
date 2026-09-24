@@ -24,11 +24,27 @@ name: Data Pipeline (Layer1-4)
 on:
   workflow_dispatch: {}
   # 2026-07-26、実データ初回検証（Layer1〜8、GitHub Actions手動実行）完了に伴い有効化。
-  # 毎朝04:30 JST = 19:30 UTC（前日）。Layer5（Cowork「AI投資アシスタント 毎朝の市場
-  # 分析」トリガー、6:30 JST起動）より前に新鮮なmarket_snapshotを用意しておくため、
-  # 2時間の余裕を持たせている。
+  # 2026-09-24改訂：当初は毎朝04:30 JST起動・6:30 JST起動のLayer5に対して2時間の
+  # 余裕を見込んでいたが、実際のGoogle Drive上のlayer4_completed_YYYYMMDD.jsonの
+  # completed_atを実測したところ、直近5日間（9/20〜9/24分）の所要時間は3時間19分〜
+  # 4時間26分であり、2時間の余裕では全く足りず、6:30 JST起動のLayer5が5日連続で
+  # blocked（データ未準備）となっていたことが判明した（Layer5側のCoworkスケジュール
+  # タスクとの会話ログ参照）。
+  #
+  # ボトルネックは主にus_equity_bulk_price チェーン（config/api_sources.yaml、Twelve
+  # Data Basicプランのrate_limit_per_minute: 8）で、S&P500構成503銘柄の第1段階
+  # スクリーニングだけで理論値約63分かかる設計であり、これに環境構築・pytestフル
+  # テスト・日本株225銘柄取得・第2段階詳細フェッチ・ニュース処理・スコアリング・
+  # Google Drive永続化が積み上がる。
+  #
+  # 実測の最大所要時間（4時間26分）に対して1時間以上の安全マージンを確保するため、
+  # 起動時刻を04:30 JSTから01:00 JST（19:30 UTC前日→16:00 UTC前日）へ3時間30分
+  # 前倒しする。これにより通常は5:30 JST前後、遅い日でも6:00〜6:20 JST頃までには
+  # completed_atに到達する想定となり、6:30 JST起動のLayer5がblockedにならず初回で
+  # 提案作成まで完了できる見込み。将来的にさらに所要時間が伸びる場合は、この
+  # completed_at実測値を再確認のうえ、開始時刻をさらに前倒しすることを検討する。
   schedule:
-    - cron: "30 19 * * *"
+    - cron: "0 16 * * *"
 
 jobs:
   phase0-smoke-test:
