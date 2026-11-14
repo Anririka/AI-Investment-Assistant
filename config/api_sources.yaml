@@ -34,6 +34,11 @@ us_equity:
       # 8回/分＝1回あたり7.5秒間隔で呼び出す。
       rate_limit_per_minute: 8
       role: "primary_bulk_scan"
+    - name: fmp
+      rate_limit_per_day: 250
+      reserved_for: ["final_candidates_detail"]
+      # 2026-11追加：Alpha Vantage（OVERVIEW）・Twelve Data（/statistics）が
+      # get_fundamentals用エンドポイントを有料プラン専用にしたため、フォールバック候補として追加。
 
 # 2026-07-26追加：config/universe.yamlをS&P500全構成銘柄（503件）に差し替えたことに伴う
 # 第1段階（広域・価格データのみ）スクリーニング専用チェーン
