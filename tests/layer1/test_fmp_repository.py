@@ -65,6 +65,69 @@ def test_get_fundamentals_parses_statements_and_profile(mock_get):
 
 
 @patch("ai_investment_assistant.layer1_data_acquisition.repositories.fmp.requests.get")
+def test_requests_use_stable_path_with_symbol_as_query_param(mock_get):
+    # 2026-11-14追加：旧/api/v3/{path}/{ticker}（pathセグメント）ではなく、
+    # 新しい/stable/{path}?symbol={ticker}（クエリパラメータ）で呼んでいることを
+    # 固定する回帰テスト（実運用でlegacyエンドポイント扱いの403を受けて発覚した不具合）。
+    mock_get.return_value = FakeResponse(200, [])
+    repo = FinancialModelingPrepRepository(api_key="k")
+
+    repo.get_fundamentals("AAPL")
+
+    called_urls = [call.args[0] for call in mock_get.call_args_list]
+    called_params = [call.kwargs.get("params", {}) for call in mock_get.call_args_list]
+    assert all("/stable/" in url for url in called_urls)
+    assert all("/api/v3/" not in url for url in called_urls)
+    assert all("AAPL" not in url for url in called_urls), "ticker must not be in the URL path"
+    assert all(params.get("symbol") == "AAPL" for params in called_params)
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.fmp.requests.get")
+def test_get_fundamentals_parses_real_stable_income_statement_response(mock_get):
+    # 2026-11-14追加：実際にFMPの/stable/income-statement?symbol=AAPLを叩いて
+    # 得られた本物のレスポンス（フィールド名確認用）をそのまま使う回帰テスト。
+    real_income_statement_sample = [
+        {
+            "date": "2026-09-26",
+            "symbol": "AAPL",
+            "fiscalYear": "2026",
+            "period": "FY",
+            "revenue": 478834000000,
+            "operatingIncome": 158063000000,
+            "netIncome": 132175000000,
+            "eps": 9.01,
+        },
+        {
+            "date": "2025-09-27",
+            "symbol": "AAPL",
+            "fiscalYear": "2025",
+            "period": "FY",
+            "revenue": 416161000000,
+            "operatingIncome": 133050000000,
+            "netIncome": 112010000000,
+            "eps": 7.49,
+        },
+    ]
+
+    def fake_get(url, params=None, timeout=None):
+        if "income-statement" in url:
+            return FakeResponse(200, real_income_statement_sample)
+        return FakeResponse(200, [])
+
+    mock_get.side_effect = fake_get
+    repo = FinancialModelingPrepRepository(api_key="k")
+
+    snapshot = repo.get_fundamentals("AAPL")
+
+    # _latestは先頭要素（最新の決算）を使う
+    assert snapshot.fiscal_period == "2026-09-26"
+    assert snapshot.revenue == 478834000000
+    assert snapshot.operating_income == 158063000000
+    assert snapshot.net_income == 132175000000
+    assert snapshot.eps == 9.01
+
+
+@patch("ai_investment_assistant.layer1_data_acquisition.repositories.fmp.requests.get")
 def test_get_fundamentals_missing_statements_defaults_to_none(mock_get):
     def fake_get(url, params=None, timeout=None):
         if "profile" in url:

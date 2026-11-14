@@ -13,12 +13,21 @@ us_equityチェーンのget_fundamentals用フォールバック候補としてF
 「未対応」とする（layer1_data_acquisition_design.md 6-2の役割分担どおり、
 広範スクリーニングはTwelve Data、米国株の日次株価もTwelve Data側が担う設計を維持する）。
 
-注意：レスポンスJSONのフィールド名は、Financial Modeling Prep公式ドキュメントの
-二次情報から実装したものであり、実際のライブAPIレスポンスとは未照合（Alpha Vantage・
-Twelve Dataの既存実装と同じ注意書き）。FMPは2024年以降、新しい`/stable/`系エンドポイント
-への移行を進めているため、無料キー取得後にまず本ファイルの`BASE_URL`配下の各エンドポイントを
-1回ずつ手動で叩き、フィールド名（特に`netIncome`・`totalStockholdersEquity`・
-`operatingCashFlow`・`capitalExpenditure`）がドキュメントと一致するか確認すること。
+2026-11-14追加（初回実装の`/api/v3/`版を実運用投入した直後に発覚・修正）：FMPは
+2025-08-31付けで旧`/api/v3/`系エンドポイントを「legacy」として一般利用不可にしており
+（実運用ログで確認、`{"Error Message": "Legacy Endpoint : ... no longer supported ...
+only available for legacy users who have valid subscriptions prior August 31, 2025"}`、
+HTTP 403）、新規キーでは完全に使用不可だった。本ファイルは当初`/api/v3/{path}/{ticker}`
+という旧仕様（pathにticker・limitクエリで絞り込み）で実装していたが、新しい`/stable/`系
+エンドポイントは`{BASE_URL}/{path}?symbol={ticker}`という形（symbolがクエリパラメータ）
+に変わっているため、`BASE_URL`・`_latest`・`get_fundamentals`のprofile取得部分を
+新仕様に合わせて修正した。フィールド名（`netIncome`・`revenue`・`operatingIncome`・
+`eps`等）は`/stable/income-statement?symbol=AAPL`の実レスポンスで確認済みで、
+旧`/api/v3/`版と同じ命名のまま変更されていないことを確認した。balance-sheet-statement・
+cash-flow-statement・profileの各レスポンスは未確認（ライブ検証待ち）のため、
+`totalStockholdersEquity`・`totalDebt`・`totalAssets`・`operatingCashFlow`・
+`capitalExpenditure`・`mktCap`・`lastDiv`がフィールド名として引き続き正しいかは
+実運用ログ（本Repositoryのget_fundamentalsが返す値がNoneだらけでないか）で要確認。
 """
 
 from __future__ import annotations
@@ -33,7 +42,7 @@ from ..exceptions import AuthError, NotFoundError, RateLimitError, TransientErro
 from ..interfaces import MarketDataRepository
 from ..models import DataFetchMeta, EarningsEvent, FundamentalSnapshot, PriceSeries, TickerInfo
 
-BASE_URL = "https://financialmodelingprep.com/api/v3"
+BASE_URL = "https://financialmodelingprep.com/stable"
 TIMEOUT_SECONDS = 30
 
 
@@ -79,7 +88,10 @@ class FinancialModelingPrepRepository(MarketDataRepository):
         return payload
 
     def _latest(self, path: str, ticker: str) -> Optional[dict]:
-        payload = self._request(f"{path}/{ticker}", {"period": "quarter", "limit": 1})
+        # 2026-11-14修正：旧`/api/v3/`はtickerをパスセグメントで渡す仕様だったが、
+        # 新しい`/stable/`はsymbolをクエリパラメータで渡す仕様に変わっている
+        # （`/stable/income-statement?symbol=AAPL`、実レスポンスで確認済み）。
+        payload = self._request(path, {"symbol": ticker, "period": "quarter", "limit": 1})
         if not payload:
             return None
         return payload[0]
@@ -90,7 +102,7 @@ class FinancialModelingPrepRepository(MarketDataRepository):
         income = self._latest("income-statement", ticker) or {}
         balance = self._latest("balance-sheet-statement", ticker) or {}
         cashflow = self._latest("cash-flow-statement", ticker) or {}
-        profile_list = self._request(f"profile/{ticker}")
+        profile_list = self._request("profile", {"symbol": ticker})
         profile = profile_list[0] if profile_list else {}
 
         def _num(value: Any) -> Optional[float]:
