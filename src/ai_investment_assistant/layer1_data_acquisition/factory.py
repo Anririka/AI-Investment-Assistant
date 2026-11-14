@@ -51,6 +51,13 @@ def _register_default_repositories() -> None:
         pass
 
     try:
+        from .repositories.fmp import FinancialModelingPrepRepository
+
+        REPOSITORY_REGISTRY["fmp"] = FinancialModelingPrepRepository.from_config
+    except ImportError:
+        pass
+
+    try:
         from .repositories.fred import FredRepository
 
         REPOSITORY_REGISTRY["fred"] = FredRepository.from_config
