@@ -100,11 +100,18 @@ class FallbackChainRepository:
                     attempt += 1
                     errors.append(exc)
                     if attempt > MAX_TRANSIENT_RETRIES:
+                        # 2026-11-16追加（実運用ログ調査で発覚）：以前は例外メッセージを
+                        # ログに出していなかったため、「transient error」が実際には
+                        # 接続タイムアウトなのかHTTP 5xxなのか、どのステータスコードだったのか
+                        # を事後にログから判別できなかった（FMPの実運用で19銘柄中18銘柄が
+                        # この経路で失敗したが原因を特定できなかった事例）。RateLimitError・
+                        # AuthErrorのログと同様に例外メッセージ自体を含める。
                         logger.warning(
                             "transient error on source=%s exceeded retry limit (%d), "
-                            "switching to next candidate",
+                            "switching to next candidate: %s",
                             candidate.name,
                             MAX_TRANSIENT_RETRIES,
+                            exc,
                         )
                         break
                     backoff = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
