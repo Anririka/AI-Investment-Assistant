@@ -128,6 +128,22 @@ def test_rate_limit_log_includes_exception_message_for_diagnosis(caplog):
     assert "25 requests per day" in caplog.text
 
 
+def test_transient_error_log_includes_exception_message_for_diagnosis(caplog):
+    # 2026-11-16追加：rate limit/auth errorのログと異なり、「exceeded retry limit」の
+    # ログには例外メッセージ自体が含まれていなかった（実運用ログ調査で発覚。FMPで
+    # 19銘柄中18銘柄がこの経路で失敗したが、HTTP 5xxか接続タイムアウトかすら
+    # 事後にログから判別できなかった）。原因調査のため、メッセージ本文がログに
+    # 含まれることを検証する（test_rate_limit_log_includes_exception_message_for_diagnosisと対の回帰テスト）。
+    first = FakeRepo([TransientError("FMP server error 503: upstream connect error")] * 4)
+    chain = FallbackChainRepository([ChainCandidate("first", first)], sleep=_no_sleep)
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(AllSourcesFailedError):
+            chain.call("get_daily_prices", "7203")
+
+    assert "FMP server error 503: upstream connect error" in caplog.text
+
+
 def test_last_source_used_reflects_the_candidate_that_succeeded():
     first = FakeRepo([RateLimitError("429")])
     second = FakeRepo(["ok-from-second"])
